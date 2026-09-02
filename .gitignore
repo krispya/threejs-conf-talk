@@ -1,0 +1,9 @@
+# managed:start
+node_modules
+dist
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.pnpm-store
+# managed:end

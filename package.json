@@ -1,0 +1,41 @@
+{
+  "name": "threejs-conf-talk",
+  "description": "Built with 🌹 create-krispya",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --build --noEmit",
+    "typecheck:watch": "tsc --build --watch",
+    "lint": "oxlint -c .config/oxlint.json",
+    "format": "prettier --config .config/prettier.json --ignore-path .config/prettierignore --write .",
+    "bake": "pnpm bake:geist && pnpm bake:geist-mono",
+    "bake:geist": "glyph bake --input public/fonts/Geist-Bold.ttf --output public/fonts/geist.font.glb --unicodes U+0020-007E --msdf --slug",
+    "bake:geist-mono": "glyph bake --input public/fonts/GeistMono-Medium.ttf --output public/fonts/geist-mono.font.glb --unicodes U+0020-007E --msdf --slug"
+  },
+  "dependencies": {
+    "@pmndrs/glyph": "0.0.0-canary-50e5ce81-20260901",
+    "@react-three/fiber": "^10.0.0-alpha.4",
+    "koota": "^0.6.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "three": "~0.185.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@types/three": "~0.185.4",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "pnpm": ">=11.0.0",
+    "node": ">=26.0.0"
+  }
+}

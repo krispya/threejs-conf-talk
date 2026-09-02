@@ -1,0 +1,4 @@
+pmOnFail: download
+
+allowBuilds:
+  esbuild: true
