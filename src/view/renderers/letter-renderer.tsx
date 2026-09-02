@@ -17,7 +17,7 @@ useMSDF.preload(fonts.sans);
 const SIZE = 2.8;
 
 /** Fixed luminance gap between a letter and whatever is behind it (linear light). */
-const CONTRAST = 0.24;
+const CONTRAST = 0.11;
 /** Below this luminance the backdrop is dark enough that letters go lighter instead. */
 const FLIP_LOW = 0.26;
 const FLIP_HIGH = 0.38;
@@ -32,7 +32,7 @@ const gradientTextMaterial = defineTextMaterial((context) => {
   const material = context.createDefaultMaterial();
   const field = gradientNode();
   const lum = luminance(field);
-  const saturated = mix(vec3(lum), field, 1.6);
+  const saturated = mix(vec3(lum), field, 1.35);
 
   const darker = saturated.mul(lum.sub(CONTRAST).max(0.02).div(lum.max(0.001)));
   const lighter = mix(saturated, vec3(1), float(CONTRAST).div(float(1).sub(lum).max(0.05)).clamp());
