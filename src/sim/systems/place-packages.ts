@@ -3,8 +3,10 @@ import { Anchor, Bounds, Package, Size } from '../traits/index.js';
 
 /** Blobs float in front of the letters, where the visible area is a bit smaller. */
 const DEPTH = 1.2;
-const DEPTH_SCALE = 0.85;
+const DEPTH_SCALE = 0.82;
 const GAP = 0.15;
+/** Room for the float orbit so a blob at the edge never leaves the screen. */
+const EDGE_MARGIN = 0.4;
 
 /**
  * Drops each new package blob at a random spot, then nudges overlapping anchors apart
@@ -20,8 +22,8 @@ export function placePackages(world: World) {
   world.query(Package, Size, Not(Anchor)).updateEach(([, size], entity) => {
     entity.add(
       Anchor({
-        x: (Math.random() * 2 - 1) * (halfWidth - size.radius),
-        y: (Math.random() * 2 - 1) * (halfHeight - size.radius),
+        x: (Math.random() * 2 - 1) * (halfWidth - size.radius - EDGE_MARGIN),
+        y: (Math.random() * 2 - 1) * (halfHeight - size.radius - EDGE_MARGIN),
         z: DEPTH + Math.random() * 0.3,
       })
     );
@@ -50,8 +52,8 @@ export function placePackages(world: World) {
 
     for (const entity of entities) {
       const id = entity.id();
-      const limitX = Math.max(0, halfWidth - size.radius[id]);
-      const limitY = Math.max(0, halfHeight - size.radius[id]);
+      const limitX = Math.max(0, halfWidth - size.radius[id] - EDGE_MARGIN);
+      const limitY = Math.max(0, halfHeight - size.radius[id] - EDGE_MARGIN);
       anchor.x[id] = Math.max(-limitX, Math.min(limitX, anchor.x[id]));
       anchor.y[id] = Math.max(-limitY, Math.min(limitY, anchor.y[id]));
     }

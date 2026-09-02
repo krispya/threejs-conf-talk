@@ -2,10 +2,12 @@ import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import { useQuery, useTrait } from 'koota/react';
+import { Color } from 'three/webgpu';
 import type { Group } from 'three/webgpu';
-import { float, smoothstep, uv } from 'three/tsl';
 import { traits } from '../../sim/index.js';
-import { fonts, ramp, spectrum } from '../../theme.js';
+import { fonts, spectrum, theme } from '../../theme.js';
+import { GlassMaterial } from '../glass/glass-material.js';
+import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 
 const { Package, Ref, Size } = traits;
 
@@ -13,6 +15,17 @@ useMSDF.preload(fonts.mono);
 
 /** Rough advance of one Geist Mono glyph relative to its font size. */
 const MONO_ADVANCE = 0.62;
+
+/** How far from clear a tinted blob leans toward its brand color. */
+const TINT_STRENGTH = 0.14;
+const CLEAR = '#ffffff';
+
+/** Every third blob stays perfectly clear; the rest carry a faint brand tint. */
+function tintFor(index: number) {
+  if (index % 3 === 0) return CLEAR;
+  const tint = new Color(CLEAR).lerp(new Color(spectrum[index % spectrum.length]), TINT_STRENGTH);
+  return `#${tint.getHexString()}`;
+}
 
 export function PackageRenderer() {
   const packages = useQuery(Package, Size);
@@ -31,9 +44,7 @@ function PackageView({ entity }: { entity: Entity }) {
   const { name, index } = useTrait(entity, Package)!;
   const { radius } = useTrait(entity, Size)!;
 
-  const color = spectrum[index % spectrum.length];
-
-  // Fit the label inside the disc, but never below a readable floor
+  // Fit the label inside the blob, but never below a readable floor
   const fontSize = Math.max(
     0.09,
     Math.min(radius * 0.28, (radius * 1.9) / (name.length * MONO_ADVANCE))
@@ -48,28 +59,36 @@ function PackageView({ entity }: { entity: Entity }) {
 
   return (
     <group ref={handleInit}>
-      {/* Drawn before the batched text and writes depth, so the disc hides the letters behind
-          it while its own label sits just in front. The alpha test keeps the faded rim from
-          punching an invisible hole through the letters. */}
+      {/* Clear glass sphere. Drawn before the batched text so labels sit on the surface. */}
       <mesh renderOrder={-1}>
-        <circleGeometry args={[radius, 64]} />
-        <meshBasicNodeMaterial alphaTest={0.02} color={color} opacityNode={blobNode()} transparent />
+        <sphereGeometry args={[radius, 64, 48]} />
+        <GlassMaterial
+          color={tintFor(index)}
+          transmission={1}
+          thickness={radius}
+          roughness={0}
+          ior={2.0}
+          dispersion={8}
+          anisotropicBlur={0}
+          attenuationDistance={0}
+          envMapIntensity={0.18}
+          samples={4}
+          backside
+          backsideThickness={radius * 2}
+          background={theme.background}
+        />
       </mesh>
+      {/* Label sits on the glass surface and is kept out of the refraction capture */}
       <Text
         font={font}
         constraints={{ width: { mode: 'exact', size: width } }}
         layout={{ align: 'center', wrap: 'none' }}
-        position={[-width / 2, fontSize / 2, 0.02]}
-        style={{ color: ramp['dark-900'], fontSize, lineHeight: 1 }}
+        position={[-width / 2, fontSize / 2, radius + 0.02]}
+        userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
+        style={{ color: theme.foreground, fontSize, lineHeight: 1 }}
       >
         {name}
       </Text>
     </group>
   );
-}
-
-/** Soft-edged disc: fully opaque in the middle, fading out toward the rim. */
-function blobNode() {
-  const distance = uv().sub(0.5).length();
-  return float(1).sub(smoothstep(0.4, 0.5, distance));
 }
