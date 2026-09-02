@@ -8,6 +8,7 @@ import { traits } from '../../sim/index.js';
 import { fonts, spectrum, theme } from '../../theme.js';
 import { GlassMaterial } from '../glass/glass-material.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
+import { createGradientTextMaterial } from '../gradient-text-material.js';
 
 const { Package, Ref, Size } = traits;
 
@@ -15,6 +16,12 @@ useMSDF.preload(fonts.mono);
 
 /** Rough advance of one Geist Mono glyph relative to its font size. */
 const MONO_ADVANCE = 0.62;
+
+/**
+ * Labels take their color from the gradient showing through the glass, held a modest step
+ * darker so they read on the highlights without turning into black stamps.
+ */
+const labelMaterial = createGradientTextMaterial({ contrast: 0.16, saturation: 1.4 });
 
 /** How far from clear a tinted blob leans toward its brand color. */
 const TINT_STRENGTH = 0.14;
@@ -83,9 +90,10 @@ function PackageView({ entity }: { entity: Entity }) {
         font={font}
         constraints={{ width: { mode: 'exact', size: width } }}
         layout={{ align: 'center', wrap: 'none' }}
+        material={labelMaterial}
         position={[-width / 2, fontSize / 2, radius + 0.02]}
         userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
-        style={{ color: theme.foreground, fontSize, lineHeight: 1 }}
+        style={{ fontSize, lineHeight: 1 }}
       >
         {name}
       </Text>
