@@ -1,9 +1,9 @@
 import type { World } from 'koota';
 import { Anchor, Bounds, Letter } from '../traits/index.js';
 
-const MAX_SPACING = 2.4;
-const MARGIN = 1.5;
-const ROW_OFFSET = 0.9;
+const MAX_SPACING = 3.3;
+const MARGIN = 2;
+const ROW_OFFSET = 1.3;
 
 /**
  * Lays the slots out left-to-right in Letter.index order and staggers them into two rows:

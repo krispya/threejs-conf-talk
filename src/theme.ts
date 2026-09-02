@@ -40,11 +40,23 @@ export const spectrum = [
   brand.blue,
 ] as const;
 
+/** Grainy pastel backdrop: lavender base, a dusky rose band, and a soft rainbow arc. */
+export const backdrop = {
+  top: '#cfcbe6',
+  bottom: '#c3cbeb',
+  rose: '#987590',
+  arcOrange: '#dc9f72',
+  arcPurple: '#a283d6',
+  arcBlue: '#aecdf3',
+  grain: 0.2,
+} as const;
+
 export const theme = {
   fonts,
   brand,
   ramp,
   spectrum,
-  background: ramp['dark-900'],
-  foreground: ramp['light-25'],
+  backdrop,
+  background: backdrop.top,
+  foreground: ramp['dark-900'],
 } as const;
