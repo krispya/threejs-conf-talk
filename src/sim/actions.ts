@@ -9,6 +9,7 @@ import {
   Rotation,
   Size,
   TargetPosition,
+  TransitionOrigin,
 } from './traits/index.js';
 
 const MIN_RADIUS = 0.32;
@@ -21,7 +22,14 @@ export function radiusForDownloads(downloads: number, min: number, max: number) 
 }
 
 export const actions = createActions((world) => ({
-  createCamera: () => world.spawn(Camera, Position({ z: 12 }), TargetPosition({ z: 12 }), Rotation),
+  createCamera: () =>
+    world.spawn(
+      Camera,
+      Position({ z: 12 }),
+      TargetPosition({ z: 12 }),
+      TransitionOrigin({ z: 12 }),
+      Rotation
+    ),
 
   createLetter: (char: string, index: number) => {
     return world.spawn(

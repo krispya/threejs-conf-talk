@@ -19,10 +19,11 @@ export function Startup() {
     const blobs = packages.map((pkg, index) =>
       createPackage(pkg.name, pkg.downloads, index, radiusForDownloads(pkg.downloads, min, max))
     );
-    start();
+    const timeline = start();
 
     return () => {
       stop();
+      timeline.destroy();
       for (const entity of [camera, ...letters, ...blobs]) entity.destroy();
     };
   }, [createCamera, createLetter, createPackage, start, stop]);
