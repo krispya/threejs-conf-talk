@@ -2,19 +2,19 @@ import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import { useFrame } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useHas, useQuery, useTrait } from 'koota/react';
+import { useHas, useQuery, useQueryFirst, useTrait, useWorld } from 'koota/react';
 import { lerp } from 'math';
-import { type ComponentRef, useCallback, useRef, useState } from 'react';
+import { type ComponentRef, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Color } from 'three/webgpu';
 import type { BufferGeometry, Group, Mesh } from 'three/webgpu';
-import { traits } from '../../sim/index.js';
+import { getTransitionProgress, traits } from '../../sim/index.js';
 import { fonts, spectrum, theme } from '../../theme.js';
 import { GlassMaterial } from '../glass/glass-material.js';
 import type { GlassPhysicalNodeMaterial } from '../glass/glass-material-core.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { createGradientTextMaterial } from '../gradient-text-material.js';
 
-const { Hidden, Package, Ref, Size } = traits;
+const { Hidden, Package, Ref, Size, Timeline } = traits;
 
 useMSDF.preload(fonts.mono);
 
@@ -40,23 +40,27 @@ function tintFor(index: number) {
 
 export function PackageRenderer() {
   const packages = useQuery(Package, Size);
+  const timeline = useQueryFirst(Timeline);
 
   return (
     <TextGroup name="packages">
       {packages.map((entity) => (
-        <PackageView key={entity} entity={entity} />
+        <PackageView key={entity} entity={entity} timeline={timeline} />
       ))}
     </TextGroup>
   );
 }
 
-function PackageView({ entity }: { entity: Entity }) {
+function PackageView({ entity, timeline }: { entity: Entity; timeline: Entity | undefined }) {
+  const world = useWorld();
+  const timing = useTrait(timeline, Timeline);
   const font = useMSDF(fonts.mono);
   const { name, index } = useTrait(entity, Package)!;
   const { radius } = useTrait(entity, Size)!;
   const visible = !useHas(entity, Hidden);
   const [present, setPresent] = useState(visible);
   const progress = useRef(visible ? 1 : 0);
+  const transition = useRef({ from: visible ? 1 : 0, target: visible ? 1 : 0 });
   const groupRef = useRef<Group>(null);
   const meshRef = useRef<Mesh<BufferGeometry, GlassPhysicalNodeMaterial>>(null);
   const labelRef = useRef<ComponentRef<typeof Text>>(null);
@@ -84,17 +88,20 @@ function PackageView({ entity }: { entity: Entity }) {
 
   if (visible && !present) setPresent(true);
 
+  useLayoutEffect(() => {
+    transition.current = { from: progress.current, target: visible ? 1 : 0 };
+  }, [visible, timing]);
+
   // Keep the glass active until its exit finishes, and reverse from the current progress
   useFrame(
-    (_, delta) => {
+    () => {
       const group = groupRef.current;
       const mesh = meshRef.current;
       const label = labelRef.current;
-      const target = visible ? 1 : 0;
+      const { from, target } = transition.current;
       if (!group || !mesh || !label || progress.current === target) return;
 
-      progress.current = lerp(progress.current, target, 1 - Math.exp(-14 * delta));
-      if (Math.abs(progress.current - target) < 0.001) progress.current = target;
+      progress.current = lerp(from, target, getTransitionProgress(world));
 
       group.scale.setScalar(Math.max(0.001, progress.current));
       mesh.material.opacity = progress.current;
