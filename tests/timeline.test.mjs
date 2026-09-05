@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createWorld, Not } from 'koota';
+import { Box3, Euler, Matrix4, Vector3 } from 'three/webgpu';
 import { createServer } from 'vite';
 
 let server;
@@ -24,6 +25,7 @@ function createScene(t) {
   const camera = actions.createCamera();
   const letter = actions.createLetter('P', 0);
   const packages = [actions.createPackage('three', 1000, 0, 1)];
+  const profiles = [actions.createProfile('drcmda', './profiles/drcmda.png', 0)];
   const timeline = sim.timelineActions(world);
 
   t.after(() => {
@@ -34,7 +36,19 @@ function createScene(t) {
   const timelineEntity = timeline.start();
   const intro = timelineEntity.targetFor(sim.FirstScreen);
   const letters = intro.targetFor(sim.NextScreen);
-  return { world, camera, letter, packages, timeline, timelineEntity, intro, letters };
+  const contributors = letters.targetFor(sim.NextScreen);
+  return {
+    world,
+    camera,
+    letter,
+    packages,
+    profiles,
+    timeline,
+    timelineEntity,
+    intro,
+    letters,
+    contributors,
+  };
 }
 
 function advance(world, seconds, fps = 60) {
@@ -71,17 +85,45 @@ void test('steps to letters and back while preserving the scene entities', (t) =
 });
 
 void test('navigation stops at the ends and supports named screens', (t) => {
-  const { world, timeline, timelineEntity, intro, letters } = createScene(t);
+  const { world, timeline, timelineEntity, intro, letters, contributors } = createScene(t);
   timeline.previous();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), intro);
   timeline.goTo('letters');
   timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), contributors);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), contributors);
   timeline.goTo('letters');
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), letters);
   assert.equal(world.query(sim.Package, Not(sim.Hidden)).length, 0);
   timeline.goTo(intro);
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), intro);
   assert.equal(world.query(sim.Package, Not(sim.Hidden)).length, 1);
+});
+
+void test('flies through the letters to contributors and returns without recreating profiles', (t) => {
+  const { world, camera, letter, profiles, timeline, letters, contributors } = createScene(t);
+  assert.equal(world.query(sim.Profile, Not(sim.Hidden)).length, 0);
+  timeline.goTo('letters');
+  advance(world, letters.get(sim.ScreenTransition).duration);
+  timeline.next();
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
+  assert.equal(letter.has(sim.Hidden), false);
+  advance(world, contributors.get(sim.ScreenTransition).duration);
+  world.set(sim.Bounds, { width: 16, height: 9 });
+  sim.systems.placeProfiles(world);
+  sim.systems.floatBodies(world);
+  assert.equal(camera.get(sim.Position).z, -5);
+  assert(camera.get(sim.Position).z < letter.get(sim.Position).z);
+  assert(profiles.every((entity) => entity.get(sim.Position).z < camera.get(sim.Position).z));
+
+  timeline.previous();
+  assert.equal(world.query(sim.Profile, Not(sim.Hidden)).length, 0);
+  advance(world, letters.get(sim.ScreenTransition).duration);
+  assert.equal(camera.get(sim.Position).z, 10);
+  timeline.next();
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
+  assert.equal(world.query(sim.Package, Not(sim.Hidden)).length, 0);
 });
 
 void test('the camera eases consistently and reverses smoothly during a transition', (t) => {
@@ -102,6 +144,42 @@ void test('the camera eases consistently and reverses smoothly during a transiti
   assert(a.camera.get(sim.Position).z < 12);
   advance(a.world, a.intro.get(sim.ScreenTransition).duration);
   assert.equal(a.camera.get(sim.Position).z, 12);
+});
+
+void test('floating portraits stay in separate depth layers', async (t) => {
+  const { world, timeline } = createScene(t);
+  const { profiles } = await server.ssrLoadModule('/src/data/profiles.ts');
+  const { createProfile } = sim.actions(world);
+  profiles
+    .slice(1)
+    .forEach((profile, index) => createProfile(profile.login, profile.avatar, index + 1));
+  world.set(sim.Bounds, { width: 16, height: 9 });
+  timeline.goTo('profiles');
+  sim.systems.placeProfiles(world);
+
+  for (let elapsed = 0; elapsed <= 120; elapsed += 0.25) {
+    sim.systems.updateTime(world, 0.25, elapsed);
+    sim.systems.floatBodies(world);
+    const layers = world
+      .query(sim.Profile, sim.Size, sim.Position, sim.Rotation)
+      .map((entity) => {
+        const radius = entity.get(sim.Size).radius + 0.025;
+        const position = entity.get(sim.Position);
+        const rotation = entity.get(sim.Rotation);
+        const transform = new Matrix4()
+          .makeRotationFromEuler(new Euler(rotation.x, rotation.y, rotation.z))
+          .setPosition(position.x, position.y, position.z);
+        return new Box3(
+          new Vector3(-radius, -radius, -0.01),
+          new Vector3(radius, radius, 0)
+        ).applyMatrix4(transform);
+      })
+      .sort((a, b) => a.min.z - b.min.z);
+
+    for (let i = 1; i < layers.length; i++) {
+      assert(layers[i - 1].max.z < layers[i].min.z, `Portraits intersect at ${elapsed}s`);
+    }
+  }
 });
 
 void test('entering applies the destination screen data in either direction', (t) => {
@@ -141,9 +219,10 @@ void test('stopping cleans up the screen and allows a fresh start', (t) => {
   assert.equal(world.query(sim.Package, Not(sim.Hidden)).length, 0);
 
   timeline.stop();
+  assert.equal(world.query(sim.Profile, Not(sim.Hidden)).length, 0);
   timelineEntity.destroy();
   assert.equal(world.query(sim.Screen).length, 0);
   const restarted = timeline.start();
-  assert.equal(world.query(sim.Screen).length, 2);
+  assert.equal(world.query(sim.Screen).length, 3);
   assert.equal(restarted.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'intro');
 });

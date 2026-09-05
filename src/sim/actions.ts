@@ -3,9 +3,11 @@ import {
   Anchor,
   Camera,
   Float,
+  Hidden,
   Letter,
   Package,
   Position,
+  Profile,
   Rotation,
   Size,
   TargetPosition,
@@ -45,6 +47,23 @@ export const actions = createActions((world) => ({
       })
     );
   },
+
+  createProfile: (login: string, avatar: string, index: number, depthIndex = index) =>
+    world.spawn(
+      Profile({ login, avatar, index }),
+      Hidden,
+      Size({ radius: 0.55 + (index % 4) * 0.07 }),
+      Position,
+      Rotation,
+      // Separate depth layers leave room for the float orbit and tilted portrait edges
+      Anchor({ z: -13 - depthIndex * 0.45 }),
+      Float({
+        phase: index * 2.4,
+        speed: 0.3 + (index % 3) * 0.08,
+        amplitude: 0.16,
+        tilt: 0.06,
+      })
+    ),
 
   // Packages get no Anchor here: placePackages assigns one once the bounds are known.
   createPackage: (name: string, downloads: number, index: number, radius: number) => {

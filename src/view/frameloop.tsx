@@ -7,6 +7,7 @@ const {
   moveCamera,
   updateAnchors,
   placePackages,
+  placeProfiles,
   floatBodies,
   syncTransforms,
   updateBounds,
@@ -20,6 +21,7 @@ export function FrameLoop() {
     moveCamera(world);
     updateAnchors(world);
     placePackages(world);
+    placeProfiles(world);
     floatBodies(world);
     syncTransforms(world);
 

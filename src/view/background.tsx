@@ -50,7 +50,7 @@ const drift = (speed: number, phase: number) => time.mul(speed).add(phase).sin()
 /** Project each screen pixel onto a world plane behind the letters. */
 const uv = Fn(() => {
   const aspect = screenSize.x.div(screenSize.y);
-  const depth = float(-8);
+  const depth = float(-24);
   const view = getViewPosition(screenUV, float(0.5), cameraProjectionMatrixInverse);
   const direction = cameraWorldMatrix.mul(vec4(view, 0)).xyz.toVar();
   const distance = depth.sub(cameraPosition.z).div(direction.z);

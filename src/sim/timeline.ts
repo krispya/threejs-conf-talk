@@ -11,6 +11,7 @@ import {
   Package,
   Position,
   PreviousScreen,
+  Profile,
   Screen,
   ScreenOf,
   ScreenTransition,
@@ -24,12 +25,8 @@ function createTimeline(world: World) {
   const timeline = world.spawn(Timeline);
   let previous: Entity | undefined;
 
-  for (const { id, packagesVisible, transition } of screens) {
-    const screen = world.spawn(
-      Screen({ id, packagesVisible }),
-      ScreenTransition(transition),
-      ScreenOf(timeline)
-    );
+  for (const { transition, ...data } of screens) {
+    const screen = world.spawn(Screen(data), ScreenTransition(transition), ScreenOf(timeline));
 
     if (previous) {
       previous.add(NextScreen(screen));
@@ -63,9 +60,13 @@ export const timelineActions = createActions((world) => {
     for (const camera of world.query(Camera, TargetPosition)) {
       camera.set(TargetPosition, { x: cameraX, y: cameraY, z: cameraZ });
     }
-    const { packagesVisible } = screen.get(Screen)!;
+    const { packagesVisible, profilesVisible } = screen.get(Screen)!;
     for (const entity of world.query(Package)) {
       if (packagesVisible) entity.remove(Hidden);
+      else entity.add(Hidden);
+    }
+    for (const entity of world.query(Profile)) {
+      if (profilesVisible) entity.remove(Hidden);
       else entity.add(Hidden);
     }
     timeline.add(ActiveScreen(screen));
@@ -79,6 +80,7 @@ export const timelineActions = createActions((world) => {
     },
     stop: () => {
       for (const entity of world.query(Package, Hidden)) entity.remove(Hidden);
+      for (const entity of world.query(Profile)) entity.add(Hidden);
       const timeline = world.queryFirst(Timeline);
       timeline?.remove(ActiveScreen('*'));
       timeline?.set(Timeline, { duration: 0 });
