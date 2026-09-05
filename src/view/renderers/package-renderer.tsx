@@ -1,13 +1,16 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useFrame } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { useHas, useQuery, useTrait } from 'koota/react';
-import { useCallback } from 'react';
+import { lerp } from 'math';
+import { type ComponentRef, useCallback, useRef, useState } from 'react';
 import { Color } from 'three/webgpu';
-import type { Group } from 'three/webgpu';
+import type { BufferGeometry, Group, Mesh } from 'three/webgpu';
 import { traits } from '../../sim/index.js';
 import { fonts, spectrum, theme } from '../../theme.js';
 import { GlassMaterial } from '../glass/glass-material.js';
+import type { GlassPhysicalNodeMaterial } from '../glass/glass-material-core.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { createGradientTextMaterial } from '../gradient-text-material.js';
 
@@ -52,6 +55,11 @@ function PackageView({ entity }: { entity: Entity }) {
   const { name, index } = useTrait(entity, Package)!;
   const { radius } = useTrait(entity, Size)!;
   const visible = !useHas(entity, Hidden);
+  const [present, setPresent] = useState(visible);
+  const progress = useRef(visible ? 1 : 0);
+  const groupRef = useRef<Group>(null);
+  const meshRef = useRef<Mesh<BufferGeometry, GlassPhysicalNodeMaterial>>(null);
+  const labelRef = useRef<ComponentRef<typeof Text>>(null);
 
   // Fit the label inside the blob, but never below a readable floor
   const fontSize = Math.max(
@@ -63,19 +71,50 @@ function PackageView({ entity }: { entity: Entity }) {
   const handleInit = useCallback(
     (group: Group | null) => {
       if (!group) return;
+      groupRef.current = group;
+      group.scale.setScalar(Math.max(0.001, progress.current));
       entity.add(Ref(group));
-      return () => entity.remove(Ref);
+      return () => {
+        groupRef.current = null;
+        entity.remove(Ref);
+      };
     },
     [entity]
   );
 
+  if (visible && !present) setPresent(true);
+
+  // Keep the glass active until its exit finishes, and reverse from the current progress
+  useFrame(
+    (_, delta) => {
+      const group = groupRef.current;
+      const mesh = meshRef.current;
+      const label = labelRef.current;
+      const target = visible ? 1 : 0;
+      if (!group || !mesh || !label || progress.current === target) return;
+
+      progress.current = lerp(progress.current, target, 1 - Math.exp(-14 * delta));
+      if (Math.abs(progress.current - target) < 0.001) progress.current = target;
+
+      group.scale.setScalar(Math.max(0.001, progress.current));
+      mesh.material.opacity = progress.current;
+      label.set({ style: { fontSize, lineHeight: 1, opacity: progress.current } });
+
+      if (progress.current === 0) {
+        group.visible = false;
+        setPresent(false);
+      }
+    },
+    { priority: -0.5, enabled: present }
+  );
+
   return (
-    <group ref={handleInit} visible={visible}>
+    <group ref={handleInit} visible={present}>
       {/* Clear glass sphere. Drawn before the batched text so labels sit on the surface. */}
-      <mesh renderOrder={-1}>
+      <mesh ref={meshRef} renderOrder={-1}>
         <sphereGeometry args={[radius, 64, 48]} />
         <GlassMaterial
-          enabled={visible}
+          enabled={present}
           color={tintFor(index)}
           transmission={1}
           thickness={radius}
@@ -93,6 +132,7 @@ function PackageView({ entity }: { entity: Entity }) {
       </mesh>
       {/* Label sits on the glass surface and is kept out of the refraction capture */}
       <Text
+        ref={labelRef}
         font={font}
         constraints={{ width: { mode: 'exact', size: width } }}
         layout={{ align: 'center', wrap: 'none' }}

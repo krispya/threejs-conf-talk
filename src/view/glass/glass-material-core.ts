@@ -13,7 +13,7 @@ export class GlassPhysicalNodeMaterial extends MeshPhysicalNodeMaterial {
   transmissionBackdropConfig!: BackdropConfig;
 
   constructor(backdrop: TextureNode, samples: number) {
-    super({ name: 'GlassMaterial', transmission: 0 });
+    super({ name: 'GlassMaterial', transmission: 0, transparent: true, depthWrite: false });
     this.transmissionUniforms = createTransmissionUniforms({
       ior: this.ior,
       thickness: this.thickness,
