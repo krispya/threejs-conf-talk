@@ -1,7 +1,8 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import { Not, type Entity } from 'koota';
-import { useQuery, useTrait } from 'koota/react';
+import type { Entity } from 'koota';
+import { useHas, useQuery, useTrait } from 'koota/react';
+import { useCallback } from 'react';
 import { Color } from 'three/webgpu';
 import type { Group } from 'three/webgpu';
 import { traits } from '../../sim/index.js';
@@ -35,7 +36,7 @@ function tintFor(index: number) {
 }
 
 export function PackageRenderer() {
-  const packages = useQuery(Package, Size, Not(Hidden));
+  const packages = useQuery(Package, Size);
 
   return (
     <TextGroup name="packages">
@@ -50,6 +51,7 @@ function PackageView({ entity }: { entity: Entity }) {
   const font = useMSDF(fonts.mono);
   const { name, index } = useTrait(entity, Package)!;
   const { radius } = useTrait(entity, Size)!;
+  const visible = !useHas(entity, Hidden);
 
   // Fit the label inside the blob, but never below a readable floor
   const fontSize = Math.max(
@@ -58,18 +60,22 @@ function PackageView({ entity }: { entity: Entity }) {
   );
   const width = Math.max(radius * 2, name.length * fontSize * MONO_ADVANCE);
 
-  const handleInit = (group: Group | null) => {
-    if (!group) return;
-    entity.add(Ref(group));
-    return () => entity.remove(Ref);
-  };
+  const handleInit = useCallback(
+    (group: Group | null) => {
+      if (!group) return;
+      entity.add(Ref(group));
+      return () => entity.remove(Ref);
+    },
+    [entity]
+  );
 
   return (
-    <group ref={handleInit}>
+    <group ref={handleInit} visible={visible}>
       {/* Clear glass sphere. Drawn before the batched text so labels sit on the surface. */}
       <mesh renderOrder={-1}>
         <sphereGeometry args={[radius, 64, 48]} />
         <GlassMaterial
+          enabled={visible}
           color={tintFor(index)}
           transmission={1}
           thickness={radius}
