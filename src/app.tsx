@@ -4,6 +4,7 @@ import { Environment } from './view/environment.js';
 import { FrameLoop } from './view/frameloop.js';
 import { Renderers } from './view/renderers.js';
 import { Startup } from './view/startup.js';
+import { TimelineControls } from './view/timeline-controls.js';
 
 export function App() {
   return (
@@ -16,6 +17,7 @@ export function App() {
 
       <FrameLoop />
       <Startup />
+      <TimelineControls />
     </Canvas>
   );
 }
