@@ -1,9 +1,16 @@
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
-import { systems, traits } from '../sim/index.js';
+import { systems } from '../sim/index.js';
 
-const { Bounds } = traits;
-const { updateTime, moveCamera, updateAnchors, placePackages, floatBodies, syncTransforms } = systems;
+const {
+  updateTime,
+  moveCamera,
+  updateAnchors,
+  placePackages,
+  floatBodies,
+  syncTransforms,
+  updateBounds,
+} = systems;
 
 export function FrameLoop() {
   const world = useWorld();
@@ -16,8 +23,7 @@ export function FrameLoop() {
     floatBodies(world);
     syncTransforms(world);
 
-    const viewport = state.viewport.getCurrentViewport(state.camera);
-    world.set(Bounds, { width: viewport.width, height: viewport.height });
+    updateBounds(world, state.viewport.getCurrentViewport(state.camera));
   });
 
   return null;
