@@ -1,6 +1,6 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import type { Entity } from 'koota';
+import { Not, type Entity } from 'koota';
 import { useQuery, useTrait } from 'koota/react';
 import { Color } from 'three/webgpu';
 import type { Group } from 'three/webgpu';
@@ -10,7 +10,7 @@ import { GlassMaterial } from '../glass/glass-material.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { createGradientTextMaterial } from '../gradient-text-material.js';
 
-const { Package, Ref, Size } = traits;
+const { Hidden, Package, Ref, Size } = traits;
 
 useMSDF.preload(fonts.mono);
 
@@ -35,7 +35,7 @@ function tintFor(index: number) {
 }
 
 export function PackageRenderer() {
-  const packages = useQuery(Package, Size);
+  const packages = useQuery(Package, Size, Not(Hidden));
 
   return (
     <TextGroup name="packages">

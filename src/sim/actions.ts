@@ -1,5 +1,15 @@
 import { createActions } from 'koota';
-import { Anchor, Camera, Float, Letter, Package, Position, Rotation, Size } from './traits/index.js';
+import {
+  Anchor,
+  Camera,
+  Float,
+  Letter,
+  Package,
+  Position,
+  Rotation,
+  Size,
+  TargetPosition,
+} from './traits/index.js';
 
 const MIN_RADIUS = 0.32;
 const MAX_RADIUS = 1.4;
@@ -11,7 +21,7 @@ export function radiusForDownloads(downloads: number, min: number, max: number) 
 }
 
 export const actions = createActions((world) => ({
-  createCamera: () => world.spawn(Camera, Position({ z: 12 }), Rotation),
+  createCamera: () => world.spawn(Camera, Position({ z: 12 }), TargetPosition({ z: 12 }), Rotation),
 
   createLetter: (char: string, index: number) => {
     return world.spawn(

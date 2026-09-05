@@ -4,13 +4,16 @@ import type { Object3D } from 'three/webgpu';
 // World-level traits
 export const Time = trait({ delta: 0, elapsed: 0 });
 export const Bounds = trait({ width: 0, height: 0 });
+export const Timeline = trait({ index: -1 });
 
 // Entity traits
 export const Camera = trait({ fov: 45, near: 0.1, far: 100 });
+export const Hidden = trait();
 export const Letter = trait({ char: '', index: 0 });
 export const Package = trait({ name: '', downloads: 0, index: 0 });
 export const Size = trait({ radius: 1 });
 export const Position = trait({ x: 0, y: 0, z: 0 });
+export const TargetPosition = trait({ x: 0, y: 0, z: 0 });
 export const Rotation = trait({ x: 0, y: 0, z: 0 });
 
 // The slot a body floats around. Letter slots are laid out in Letter.index order.

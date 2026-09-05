@@ -1,12 +1,13 @@
 import { useActions } from 'koota/react';
 import { useEffect } from 'react';
 import { packages } from '../data/packages.js';
-import { actions, radiusForDownloads } from '../sim/index.js';
+import { actions, radiusForDownloads, timelineActions } from '../sim/index.js';
 
 const WORD = 'PMNDRS';
 
 export function Startup() {
   const { createCamera, createLetter, createPackage } = useActions(actions);
+  const { start, stop } = useActions(timelineActions);
 
   useEffect(() => {
     const camera = createCamera();
@@ -18,11 +19,13 @@ export function Startup() {
     const blobs = packages.map((pkg, index) =>
       createPackage(pkg.name, pkg.downloads, index, radiusForDownloads(pkg.downloads, min, max))
     );
+    start();
 
     return () => {
+      stop();
       for (const entity of [camera, ...letters, ...blobs]) entity.destroy();
     };
-  }, [createCamera, createLetter, createPackage]);
+  }, [createCamera, createLetter, createPackage, start, stop]);
 
   return null;
 }

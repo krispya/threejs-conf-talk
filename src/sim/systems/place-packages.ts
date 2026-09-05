@@ -1,5 +1,5 @@
 import { Not, type World } from 'koota';
-import { Anchor, Bounds, Package, Size } from '../traits/index.js';
+import { Anchor, Bounds, Hidden, Package, Size } from '../traits/index.js';
 
 /** Blobs float in front of the letters, where the visible area is a bit smaller. */
 const DEPTH = 1.2;
@@ -19,7 +19,7 @@ export function placePackages(world: World) {
   const halfWidth = (bounds.width / 2) * DEPTH_SCALE;
   const halfHeight = (bounds.height / 2) * DEPTH_SCALE;
 
-  world.query(Package, Size, Not(Anchor)).updateEach(([, size], entity) => {
+  world.query(Package, Size, Not(Anchor), Not(Hidden)).updateEach(([, size], entity) => {
     entity.add(
       Anchor({
         x: (Math.random() * 2 - 1) * (halfWidth - size.radius - EDGE_MARGIN),
@@ -29,7 +29,7 @@ export function placePackages(world: World) {
     );
   });
 
-  world.query(Package, Size, Anchor).useStores(([, size, anchor], entities) => {
+  world.query(Package, Size, Anchor, Not(Hidden)).useStores(([, size, anchor], entities) => {
     for (let i = 0; i < entities.length; i++) {
       const a = entities[i].id();
       for (let j = i + 1; j < entities.length; j++) {
