@@ -1,18 +1,15 @@
-import { useFrame, useThree } from '@react-three/fiber/webgpu';
-import { useEffect, useMemo } from 'react';
-import { uniform } from 'three/tsl';
-import { Color, FrontSide } from 'three/webgpu';
+import { extend, useFrame } from '@react-three/fiber/webgpu';
+import { useLayoutEffect, useRef } from 'react';
+import { FrontSide } from 'three/webgpu';
 import type { Side } from 'three/webgpu';
 import { GlassPhysicalNodeMaterial } from './glass-material-core.js';
-import {
-  captureBackdrop,
-  getBackdropTextureNode,
-  registerGlassMaterial,
-  unregisterGlassMaterial,
-} from './transmission-backdrop.js';
-import { buildTransmissionBackdropNode, createTransmissionUniforms } from './transmission-nodes.js';
+import { useTransmissionBackdrop } from './transmission-backdrop-provider.js';
+
+const GlassMaterialElement = extend(GlassPhysicalNodeMaterial);
 
 export interface GlassMaterialProps {
+  /** Pause backdrop capture while retaining the material and its resources. */
+  enabled?: boolean;
   color?: string;
   emissive?: string;
   emissiveIntensity?: number;
@@ -44,6 +41,7 @@ export interface GlassMaterialProps {
  * Captures the scene behind the glass once per frame and refracts it through the volume.
  */
 export function GlassMaterial({
+  enabled = true,
   color = '#ffffff',
   emissive = '#000000',
   emissiveIntensity = 0,
@@ -67,44 +65,13 @@ export function GlassMaterial({
   background = '#161616',
   side = FrontSide,
 }: GlassMaterialProps) {
-  const renderer = useThree((state) => state.renderer);
-  const scene = useThree((state) => state.scene);
-  const camera = useThree((state) => state.camera);
+  const backdrop = useTransmissionBackdrop();
+  const materialRef = useRef<GlassPhysicalNodeMaterial>(null);
 
-  const material = useMemo(() => {
-    const uniforms = createTransmissionUniforms({
-      ior,
-      thickness,
-      backsideThickness,
-      anisotropicBlur,
-      distortion,
-      distortionScale,
-      temporalDistortion,
-      attenuationDistance,
-      attenuationColor: new Color(attenuationColor),
-    });
-
-    const next = new GlassPhysicalNodeMaterial({ name: 'GlassMaterial', transmission: 0 });
-    next.transmissionUniforms = uniforms;
-    next.transmissionNode = uniform(transmission);
-    next.thicknessNode = uniforms.thickness;
-    next.iorNode = uniforms.ior;
-    next.attenuationDistanceNode = uniforms.attenuationDistance;
-    next.attenuationColorNode = uniforms.attenuationColor;
-    next.transmissionBackdropNode = buildTransmissionBackdropNode(
-      getBackdropTextureNode(renderer),
-      uniforms,
-      samples
-    );
-    return next;
-    // Only the sample count changes the compiled shader; everything else is a uniform.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderer, samples]);
-
-  // Push prop changes into uniforms and material fields without recompiling.
-  // Mutating the material is intentional: it is a Three object, not React state.
-  // oxlint-disable-next-line react/immutability
-  useEffect(() => {
+  // Apply uniforms before the next capture or render
+  useLayoutEffect(() => {
+    const material = materialRef.current;
+    if (!material) return;
     const u = material.transmissionUniforms;
     (material.transmissionNode as unknown as { value: number }).value = transmission;
     u.ior.value = ior;
@@ -138,24 +105,29 @@ export function GlassMaterial({
     };
   });
 
-  // oxlint-disable-next-line react/immutability
-  useEffect(() => {
-    registerGlassMaterial(material, scene, camera, renderer);
-    return () => {
-      unregisterGlassMaterial(material, renderer);
-      material.dispose();
-    };
-  }, [material, scene, camera, renderer]);
+  useLayoutEffect(() => {
+    const material = materialRef.current;
+    if (!enabled || !material) return;
+    backdrop.register(material);
+    return () => backdrop.unregister(material);
+  }, [backdrop, enabled, samples]);
 
   // Capture after the sim has synced transforms (priority 0) but before the render phase
   useFrame(
-    // oxlint-disable-next-line react/immutability
     (state, delta) => {
+      const material = materialRef.current;
+      if (!material) return;
       material.transmissionUniforms.time.value += delta;
-      captureBackdrop(renderer, scene, camera, state.frame);
+      backdrop.capture(state.renderer, state.scene, state.camera, state.frame);
     },
-    { priority: -1 }
+    { priority: -1, enabled }
   );
 
-  return <primitive object={material} attach="material" />;
+  return (
+    <GlassMaterialElement
+      ref={materialRef}
+      args={[backdrop.textureNode, samples]}
+      attach="material"
+    />
+  );
 }

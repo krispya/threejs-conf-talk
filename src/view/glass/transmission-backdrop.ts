@@ -5,7 +5,6 @@ import { texture } from 'three/tsl';
 import {
   BackSide,
   Color,
-  FrontSide,
   HalfFloatType,
   LinearFilter,
   LinearMipmapLinearFilter,
@@ -14,15 +13,7 @@ import {
   RenderTarget,
   Vector2,
 } from 'three/webgpu';
-import type {
-  Camera,
-  Material,
-  Mesh,
-  Object3D,
-  Scene,
-  TextureNode,
-  WebGPURenderer,
-} from 'three/webgpu';
+import type { Camera, Material, Mesh, Object3D, Scene, Side, WebGPURenderer } from 'three/webgpu';
 import type { GlassPhysicalNodeMaterial } from './glass-material-core.js';
 
 /** userData flag: objects that sit on the glass and must not be captured into the backdrop. */
@@ -69,127 +60,70 @@ function usesMaterial(mesh: Mesh, materials: Set<Material>) {
   return Array.isArray(material) ? material.some((m) => materials.has(m)) : materials.has(material);
 }
 
-class TransmissionBackdropManager {
+export class TransmissionBackdropManager {
   readonly materials = new Set<GlassPhysicalNodeMaterial>();
-  scene: Scene | null = null;
-  camera: Camera | null = null;
-  private cleanTarget: RenderTarget | null = null;
-  private backsideTarget: RenderTarget | null = null;
-  private textureNode: TextureNode | null = null;
+  private readonly cleanTarget = createTarget(1, 1, 'TransmissionBackdropClean');
+  private readonly backsideTarget = createTarget(1, 1, 'TransmissionBackdropBackside');
+  readonly textureNode = texture(this.cleanTarget.texture);
   private lastCaptureTick = -1;
-  private readonly renderer: WebGPURenderer;
 
-  constructor(renderer: WebGPURenderer) {
-    this.renderer = renderer;
+  // Targets are local JS descriptors until the first committed capture uses them
+  constructor() {
+    this.textureNode.updateBeforeType = NodeUpdateType.NONE;
   }
 
-  register(material: GlassPhysicalNodeMaterial, scene: Scene, camera: Camera) {
+  register(material: GlassPhysicalNodeMaterial) {
     this.materials.add(material);
-    this.scene = scene;
-    this.camera = camera;
-    this.ensureResources();
   }
 
   unregister(material: GlassPhysicalNodeMaterial) {
     this.materials.delete(material);
   }
 
-  private config(): BackdropConfig {
-    const first = this.materials.values().next().value;
-    return (
-      first?.transmissionBackdropConfig ?? {
-        backside: false,
-        backsideThickness: 0,
-        thickness: 0,
-        backdropResolutionScale: 1,
-        backsideResolutionScale: 1,
-        background: '#000000',
-      }
-    );
-  }
-
-  private cleanSize(config: BackdropConfig) {
-    return scaledSize(
-      this.renderer,
+  private resizeTargets(renderer: WebGPURenderer, config: BackdropConfig) {
+    const clean = scaledSize(
+      renderer,
       config.backside ? config.backsideResolutionScale : config.backdropResolutionScale
     );
-  }
-
-  private ensureResources() {
-    const config = this.config();
-
-    if (!this.cleanTarget) {
-      const { width, height } = this.cleanSize(config);
-      this.cleanTarget = createTarget(width, height, 'TransmissionBackdropClean');
-    }
-
-    if (config.backside && !this.backsideTarget) {
-      const { width, height } = scaledSize(this.renderer, config.backdropResolutionScale);
-      this.backsideTarget = createTarget(width, height, 'TransmissionBackdropBackside');
-    }
-
-    if (!this.textureNode) {
-      this.textureNode = texture((this.backsideTarget ?? this.cleanTarget).texture);
-      this.textureNode.updateBeforeType = NodeUpdateType.NONE;
-    }
-  }
-
-  private resizeTargets(config: BackdropConfig) {
-    const clean = this.cleanSize(config);
-    if (
-      this.cleanTarget &&
-      (this.cleanTarget.width !== clean.width || this.cleanTarget.height !== clean.height)
-    ) {
-      this.cleanTarget.setSize(clean.width, clean.height);
-    }
+    this.cleanTarget.setSize(clean.width, clean.height);
 
     if (config.backside) {
-      const size = scaledSize(this.renderer, config.backdropResolutionScale);
-      if (!this.backsideTarget) {
-        this.backsideTarget = createTarget(size.width, size.height, 'TransmissionBackdropBackside');
-      } else if (
-        this.backsideTarget.width !== size.width ||
-        this.backsideTarget.height !== size.height
-      ) {
-        this.backsideTarget.setSize(size.width, size.height);
-      }
-    } else if (this.backsideTarget) {
-      this.backsideTarget.dispose();
-      this.backsideTarget = null;
+      const size = scaledSize(renderer, config.backdropResolutionScale);
+      this.backsideTarget.setSize(size.width, size.height);
     }
   }
 
-  getTextureNode() {
-    this.ensureResources();
-    return this.textureNode!;
+  dispose() {
+    this.cleanTarget.dispose();
+    this.backsideTarget.dispose();
+    this.textureNode.value = this.cleanTarget.texture;
+    this.materials.clear();
+    this.lastCaptureTick = -1;
   }
 
-  capture(frameTick: number) {
-    if (this.materials.size === 0 || !this.scene || !this.camera) return;
+  capture(renderer: WebGPURenderer, scene: Scene, camera: Camera, frameTick: number) {
+    const first = this.materials.values().next().value;
+    if (!first) return;
     if (frameTick === this.lastCaptureTick) return;
-    this.lastCaptureTick = frameTick;
+    const config = first.transmissionBackdropConfig;
+    this.resizeTargets(renderer, config);
 
-    this.ensureResources();
-    const config = this.config();
-    this.resizeTargets(config);
-
-    const renderer = this.renderer;
-    const scene = this.scene;
-    const camera = this.camera;
-    const textureNode = this.textureNode!;
-    const cleanTarget = this.cleanTarget!;
+    const textureNode = this.textureNode;
+    const cleanTarget = this.cleanTarget;
 
     const prevTarget = renderer.getRenderTarget();
     const prevAutoClear = renderer.autoClear;
     const prevBackground = scene.background;
     const prevToneMapping = renderer.toneMapping;
     const prevExposure = renderer.toneMappingExposure;
+    const prevTexture = textureNode.value;
 
     const materials = this.materials as unknown as Set<Material>;
     const hidden: Mesh[] = [];
     const excluded: Object3D[] = [];
-    scene.traverse((object) => {
-      if (!object.visible) return;
+    const restore: Array<{ material: GlassPhysicalNodeMaterial; thickness: number; side: Side }> = [];
+    let captured = false;
+    scene.traverseVisible((object) => {
       if (isMesh(object) && usesMaterial(object, materials)) {
         hidden.push(object);
         object.visible = false;
@@ -212,13 +146,16 @@ class TransmissionBackdropManager {
 
       for (const mesh of hidden) mesh.visible = true;
 
-      if (config.backside && this.backsideTarget) {
+      if (config.backside) {
         // Backside pass: glass back faces refracting the clean capture
         textureNode.value = cleanTarget.texture;
 
-        const restore: Array<{ material: GlassPhysicalNodeMaterial; thickness: number }> = [];
         for (const material of this.materials) {
-          restore.push({ material, thickness: material.transmissionUniforms.thickness.value });
+          restore.push({
+            material,
+            thickness: material.transmissionUniforms.thickness.value,
+            side: material.side,
+          });
           material.side = BackSide;
           material.transmissionUniforms.thickness.value = config.backsideThickness;
         }
@@ -227,16 +164,18 @@ class TransmissionBackdropManager {
         renderer.autoClear = true;
         renderer.render(scene, camera);
 
-        for (const { material, thickness } of restore) {
-          material.side = FrontSide;
-          material.transmissionUniforms.thickness.value = thickness;
-        }
-
         textureNode.value = this.backsideTarget.texture;
       } else {
         textureNode.value = cleanTarget.texture;
       }
+      this.lastCaptureTick = frameTick;
+      captured = true;
     } finally {
+      for (const { material, thickness, side } of restore) {
+        material.side = side;
+        material.transmissionUniforms.thickness.value = thickness;
+      }
+      if (!captured) textureNode.value = prevTexture;
       for (const mesh of hidden) mesh.visible = true;
       for (const object of excluded) object.visible = true;
       scene.background = prevBackground;
@@ -246,48 +185,4 @@ class TransmissionBackdropManager {
       renderer.autoClear = prevAutoClear;
     }
   }
-}
-
-const managers = new WeakMap<WebGPURenderer, TransmissionBackdropManager>();
-
-function getManager(renderer: WebGPURenderer) {
-  let manager = managers.get(renderer);
-  if (!manager) {
-    manager = new TransmissionBackdropManager(renderer);
-    managers.set(renderer, manager);
-  }
-  return manager;
-}
-
-export function registerGlassMaterial(
-  material: GlassPhysicalNodeMaterial,
-  scene: Scene,
-  camera: Camera,
-  renderer: WebGPURenderer
-) {
-  getManager(renderer).register(material, scene, camera);
-}
-
-export function unregisterGlassMaterial(
-  material: GlassPhysicalNodeMaterial,
-  renderer: WebGPURenderer
-) {
-  managers.get(renderer)?.unregister(material);
-}
-
-export function captureBackdrop(
-  renderer: WebGPURenderer,
-  scene: Scene,
-  camera: Camera,
-  frameTick: number
-) {
-  const manager = managers.get(renderer);
-  if (!manager) return;
-  manager.scene = scene;
-  manager.camera = camera;
-  manager.capture(frameTick);
-}
-
-export function getBackdropTextureNode(renderer: WebGPURenderer) {
-  return getManager(renderer).getTextureNode();
 }
