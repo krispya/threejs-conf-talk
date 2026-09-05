@@ -8,7 +8,7 @@ export const screens = [
   {
     id: 'letters',
     packagesVisible: false,
-    transition: { duration: 0.5, cameraX: 0, cameraY: 0, cameraZ: 10 },
+    transition: { duration: 0.9, cameraX: 0, cameraY: 0, cameraZ: 10 },
   },
 ] as const;
 
