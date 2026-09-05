@@ -17,6 +17,9 @@ importers:
       koota:
         specifier: ^0.6.6
         version: 0.6.6(@types/react@19.2.18)(react@19.2.8)
+      math:
+        specifier: 1.0.0-canary-37519dcd-20260903
+        version: 1.0.0-canary-37519dcd-20260903
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -682,6 +685,9 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
+  math@1.0.0-canary-37519dcd-20260903:
+    resolution: {integrity: sha512-aul1nzD8ob5wKMKVQqOXe5ufT/xmiTHxObL81J2ImgNRwpRg+r7IeWOQ2WnD5W/cvpZc7gySwXs0YjVpDtahTQ==}
+
   meshoptimizer@1.1.1:
     resolution: {integrity: sha512-oRFNWJRDA/WTrVj7NWvqa5HqE1t9MYDj2VaWirQCzCCrAd2GHrqR/sQezCxiWATPNlKTcRaPRHPJwIRoPBAp5g==}
 
@@ -1228,6 +1234,8 @@ snapshots:
       lightningcss-linux-x64-musl: 1.33.0
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
+
+  math@1.0.0-canary-37519dcd-20260903: {}
 
   meshoptimizer@1.1.1: {}
 

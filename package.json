@@ -17,6 +17,7 @@
     "@pmndrs/glyph": "0.0.0-canary-50e5ce81-20260901",
     "@react-three/fiber": "10.0.0-canary.c385e9f",
     "koota": "^0.6.6",
+    "math": "1.0.0-canary-37519dcd-20260903",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "~0.185.1"
