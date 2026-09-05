@@ -6,9 +6,10 @@ import { actions, radiusForDownloads } from '../sim/index.js';
 const WORD = 'PMNDRS';
 
 export function Startup() {
-  const { createLetter, createPackage } = useActions(actions);
+  const { createCamera, createLetter, createPackage } = useActions(actions);
 
   useEffect(() => {
+    const camera = createCamera();
     const letters = Array.from(WORD, (char, index) => createLetter(char, index));
 
     const counts = packages.map((pkg) => pkg.downloads);
@@ -19,9 +20,9 @@ export function Startup() {
     );
 
     return () => {
-      for (const entity of [...letters, ...blobs]) entity.destroy();
+      for (const entity of [camera, ...letters, ...blobs]) entity.destroy();
     };
-  }, [createLetter, createPackage]);
+  }, [createCamera, createLetter, createPackage]);
 
   return null;
 }

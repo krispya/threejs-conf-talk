@@ -6,6 +6,7 @@ export const Time = trait({ delta: 0, elapsed: 0 });
 export const Bounds = trait({ width: 0, height: 0 });
 
 // Entity traits
+export const Camera = trait({ fov: 45, near: 0.1, far: 100 });
 export const Letter = trait({ char: '', index: 0 });
 export const Package = trait({ name: '', downloads: 0, index: 0 });
 export const Size = trait({ radius: 1 });
