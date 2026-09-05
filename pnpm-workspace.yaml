@@ -2,3 +2,6 @@ pmOnFail: download
 
 allowBuilds:
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@react-three/fiber@10.0.0-canary.c385e9f'
