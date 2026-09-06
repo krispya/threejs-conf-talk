@@ -1,5 +1,6 @@
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { float, luminance, mix, smoothstep, vec3 } from 'three/tsl';
+import type { Node } from 'three/webgpu';
 import { gradientNode } from './background.js';
 
 export interface GradientTextOptions {
@@ -7,6 +8,8 @@ export interface GradientTextOptions {
   contrast: number;
   /** Saturation multiplier applied to the sampled field before the luminance shift. */
   saturation: number;
+  /** Optional opacity shared by all text using this material. */
+  opacity?: Node<'float'>;
 }
 
 /** Below this luminance the backdrop is dark enough that text goes lighter instead of darker. */
@@ -16,10 +19,10 @@ const FLIP_HIGH = 0.38;
 /**
  * Text cut from the same gradient as the backdrop and held a fixed luminance distance from it:
  * darker over the pale areas, lighter inside the dusky band. Legibility stays constant while
- * the color still belongs to the field behind it. The default glyph material keeps the MSDF
- * coverage in its opacity, so only the color node is replaced.
+ * the color still belongs to the field behind it. Glyph coverage is preserved when applying
+ * an optional shared opacity.
  */
-export function createGradientTextMaterial({ contrast, saturation }: GradientTextOptions) {
+export function createGradientTextMaterial({ contrast, saturation, opacity }: GradientTextOptions) {
   return defineTextMaterial((context) => {
     const material = context.createDefaultMaterial();
     const field = gradientNode();
@@ -31,6 +34,8 @@ export function createGradientTextMaterial({ contrast, saturation }: GradientTex
     const towardDark = smoothstep(FLIP_LOW, FLIP_HIGH, lum);
 
     material.colorNode = mix(lighter, darker, towardDark);
+    if (opacity)
+      material.opacityNode = (material.opacityNode as Node<'float'> | null)?.mul(opacity) ?? opacity;
     return material;
   });
 }

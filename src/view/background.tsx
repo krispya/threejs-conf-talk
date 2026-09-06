@@ -1,7 +1,10 @@
 import { useThree } from '@react-three/fiber/webgpu';
-import { useEffect } from 'react';
+import { useQueryFirst, useTarget, useTrait } from 'koota/react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Fn,
+  If,
+  atan,
   cameraPosition,
   cameraProjectionMatrixInverse,
   cameraWorldMatrix,
@@ -18,8 +21,11 @@ import {
   vec2,
   vec4,
 } from 'three/tsl';
-import { NoToneMapping } from 'three/webgpu';
-import { backdrop } from '../theme.js';
+import { Color, NoToneMapping } from 'three/webgpu';
+import { ActiveScreen, Screen, Timeline } from '../sim/index.js';
+import { backdrop, brand } from '../theme.js';
+import { useTransitionOpacity } from './use-transition-opacity.js';
+import { bakeNebula, starfieldNode } from './starfield.js';
 
 // TSL nodes are loosely typed; `any` keeps the shader readable.
 /* oxlint-disable typescript/no-explicit-any */
@@ -34,9 +40,22 @@ const glow = (distance: N, width: number): N =>
       .div(2 * width * width)
   );
 
-/** Blends the three-band orange, purple, blue arc into `base` around a circle. */
-function paintArc(base: N, p: N, center: N, radius: N, strength: N) {
-  const arc: N = length(p.sub(center)).sub(radius);
+/** Colored rings stretch into asymmetric loops during the pullback. */
+function paintArc(base: N, p: N, center: N, radius: N, strength: N, morph: N, phase: number) {
+  const motion = time.mul(0.35).add(morph.mul(4)).add(phase);
+  const stretch = motion.sin().mul(morph).mul(0.4).add(1);
+  const delta = p.sub(center);
+  const local = vec2(delta.x.mul(stretch), delta.y.div(stretch)).toVar();
+  const angle = atan(local.y, local.x);
+  const contour = angle
+    .mul(3)
+    .add(motion)
+    .sin()
+    .mul(0.17)
+    .add(angle.mul(2).sub(motion.mul(0.7)).sin().mul(0.12))
+    .mul(morph)
+    .mul(radius);
+  const arc: N = length(local).sub(radius).sub(contour);
   base.assign(
     mix(base, color(backdrop.arcOrange), glow(arc.add(0.02), 0.06).mul(strength.mul(0.85)))
   );
@@ -60,7 +79,21 @@ const uv = Fn(() => {
   const height = float(12)
     .sub(depth)
     .mul(2 * Math.tan((45 * Math.PI) / 360));
-  return vec2(point.x, point.y.negate()).div(height).add(vec2(aspect, 1).mul(0.5));
+  const p = vec2(point.x, point.y.negate()).div(height).toVar();
+  const pullback = cameraPosition.z.sub(12).div(108).clamp();
+  const flow = time.mul(0.22).add(pullback.mul(3));
+
+  // A radial twist unfolds as the camera leaves the intro framing
+  const angle = pullback.mul(p.length().mul(0.9).sub(flow).sin().mul(0.25).add(0.65)).toVar();
+  p.assign(
+    vec2(
+      p.x.mul(angle.cos()).sub(p.y.mul(angle.sin())),
+      p.x.mul(angle.sin()).add(p.y.mul(angle.cos()))
+    )
+  );
+  // Let the shapes expand during the pullback so their motion stays readable
+  p.divAssign(pullback.mul(1.3).add(1));
+  return p.add(vec2(aspect, 1).mul(0.5));
 });
 
 /**
@@ -71,13 +104,22 @@ const uv = Fn(() => {
 export const gradientNode = Fn(() => {
   const aspect = screenSize.x.div(screenSize.y);
   const p = uv().toVar();
+  const morph = cameraPosition.z.sub(12).div(108).clamp();
 
   // Lavender base, slightly lighter toward the top; the split slides up and down
-  const split = p.y.add(drift(0.21, 0.7).mul(0.12));
+  const split = p.y.add(drift(0.21, 0.7).mul(0.12)).clamp();
   const base = mix(color(backdrop.bottom), color(backdrop.top), split).toVar();
 
-  // Dusky rose band across the upper middle, tilted a touch and slowly rising and falling
-  const bandOffset = float(0.58).add(p.x.mul(0.04)).add(drift(0.27, 0).mul(0.06));
+  // The rose band curls into a flowing ribbon as the rings change shape
+  const bend = p.x
+    .mul(2.4)
+    .sub(time.mul(0.3))
+    .add(morph.mul(3.8))
+    .sin()
+    .mul(0.42)
+    .add(p.x.mul(4.1).add(time.mul(0.21)).sin().mul(0.12))
+    .mul(morph);
+  const bandOffset = float(0.58).add(p.x.mul(0.04)).add(drift(0.27, 0).mul(0.06)).add(bend);
   const rose = glow(p.y.sub(bandOffset), 0.11);
   base.assign(mix(base, color(backdrop.rose), rose.mul(float(0.8).add(drift(0.19, 2.2).mul(0.15)))));
 
@@ -91,21 +133,27 @@ export const gradientNode = Fn(() => {
       float(-0.55).add(drift(0.17, 0.3).mul(0.1))
     ),
     float(0.95).add(drift(0.29, 1.3).mul(0.08)),
-    float(1).add(drift(0.33, 0.4).mul(0.25))
+    float(1).add(drift(0.33, 0.4).mul(0.25)),
+    morph,
+    0
   );
   paintArc(
     base,
     p,
     vec2(aspect.mul(0.9).add(drift(0.19, 2.9).mul(0.14)), float(1.55).add(drift(0.25, 1.7).mul(0.1))),
     float(1.15).add(drift(0.22, 2.9).mul(0.09)),
-    float(0.85).add(drift(0.3, 1.9).mul(0.25))
+    float(0.85).add(drift(0.3, 1.9).mul(0.25)),
+    morph,
+    2.1
   );
   paintArc(
     base,
     p,
     vec2(aspect.mul(0.05).add(drift(0.26, 4.1).mul(0.1)), float(1.3).add(drift(0.2, 3.7).mul(0.1))),
     float(0.6).add(drift(0.35, 4.1).mul(0.06)),
-    float(0.65).add(drift(0.28, 3.3).mul(0.2))
+    float(0.65).add(drift(0.28, 3.3).mul(0.2)),
+    morph,
+    4.2
   );
 
   return base;
@@ -120,12 +168,14 @@ const backdropNode = Fn(() => {
   const cell = p.floor();
   const blend = p.fract();
   const seed = cell.x.add(cell.y.mul(4096));
+  // Preserve negative cells when the hash converts its seed to an unsigned integer
+  const noise = (offset: number) => hash(seed.add(offset).toInt());
 
   // Bilinear sampling lets the texture move smoothly between grain cells
   const sample = (offset: number) =>
     mix(
-      mix(hash(seed.add(offset)), hash(seed.add(offset + 1)), blend.x),
-      mix(hash(seed.add(offset + 4096)), hash(seed.add(offset + 4097)), blend.x),
+      mix(noise(offset), noise(offset + 1), blend.x),
+      mix(noise(offset + 4096), noise(offset + 4097), blend.x),
       blend.y
     );
   const layerA = sample(0);
@@ -141,18 +191,49 @@ export function Background() {
   const scene = useThree((state) => state.scene);
   const renderer = useThree((state) => state.renderer);
   const shader = backdropNode;
+  // The nebula bakes once and the star shader samples it for the rest of the session
+  const [nebula] = useState(() => bakeNebula(renderer));
+  const [starsShader] = useState(() => starfieldNode(nebula.texture));
+  useEffect(() => () => nebula.dispose(), [nebula]);
+  const timeline = useQueryFirst(Timeline);
+  const screen = useTarget(timeline, ActiveScreen);
+  const data = useTrait(screen, Screen);
+  const solid = !data || data.background === 'solid';
+  const opacity = useTransitionOpacity(data?.backgroundVisible ?? true);
+  const stars = useTransitionOpacity(data?.background === 'stars');
+  const background = useMemo(
+    () =>
+      Fn(() => {
+        const field = vec4(0).toVar();
+        // Hold the pastel shapes through more of the pullback before revealing the stars
+        const starMix = stars.pow(3);
+        // Retain both styles while skipping the inactive background's fragment work
+        If(stars.lessThan(1), () => {
+          field.addAssign(shader().mul(starMix.oneMinus()));
+        });
+        If(stars.greaterThan(0), () => {
+          field.addAssign(starsShader().mul(starMix));
+        });
+        return mix(vec4(color(backdrop.top), 1), field, opacity);
+      })(),
+    [shader, starsShader, opacity, stars]
+  );
 
   /* oxlint-disable react/immutability */
   useEffect(() => {
     // Pastels get compressed by filmic tone mapping, so output the colors as authored
     const prevToneMapping = renderer.toneMapping;
+    const prevBackground = scene.background;
+    const prevBackgroundNode = scene.backgroundNode;
     renderer.toneMapping = NoToneMapping;
-    scene.backgroundNode = shader();
+    scene.background = new Color(brand.green);
+    scene.backgroundNode = solid ? null : background;
     return () => {
-      scene.backgroundNode = null;
+      scene.background = prevBackground;
+      scene.backgroundNode = prevBackgroundNode;
       renderer.toneMapping = prevToneMapping;
     };
-  }, [scene, renderer, shader]);
+  }, [scene, renderer, background, solid]);
   /* oxlint-enable react/immutability */
 
   return null;

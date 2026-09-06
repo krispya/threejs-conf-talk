@@ -1,20 +1,26 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useHas, useQuery, useQueryFirst, useTrait, useWorld } from 'koota/react';
-import { lerp } from 'math';
+import { useHas, useQuery, useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
+import { clamp, lerp } from 'math';
+import { easing } from 'math/time';
 import { type ComponentRef, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Color } from 'three/webgpu';
+import { color } from 'three/tsl';
 import type { BufferGeometry, Group, Mesh } from 'three/webgpu';
-import { getTransitionProgress, traits } from '../../sim/index.js';
-import { fonts, spectrum, theme } from '../../theme.js';
+import { traits } from '../../sim/index.js';
+import { brand, fonts, spectrum, theme } from '../../theme.js';
 import { GlassMaterial } from '../glass/glass-material.js';
 import type { GlassPhysicalNodeMaterial } from '../glass/glass-material-core.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { createGradientTextMaterial } from '../gradient-text-material.js';
+import { packageSpring } from '../package-spring.js';
+import { PackageDownloads } from './package-downloads.js';
+import { PackageFeatures } from './package-features.js';
 
-const { Hidden, Package, Ref, Size, Timeline } = traits;
+const { ActiveScreen, Hidden, Package, PackageSizing, Ref, Screen, Size, Time, Timeline } = traits;
 
 useMSDF.preload(fonts.mono);
 
@@ -26,6 +32,11 @@ const MONO_ADVANCE = 0.62;
  * darker so they read on the highlights without turning into black stamps.
  */
 const labelMaterial = createGradientTextMaterial({ contrast: 0.34, saturation: 1.5 });
+const focusedLabelMaterial = defineTextMaterial((context) => {
+  const material = context.createDefaultMaterial();
+  material.colorNode = color('#000000');
+  return material;
+});
 
 /** How far from clear a tinted blob leans toward its brand color. */
 const TINT_STRENGTH = 0.14;
@@ -39,28 +50,100 @@ function tintFor(index: number) {
 }
 
 export function PackageRenderer() {
+  const world = useWorld();
   const packages = useQuery(Package, Size);
   const timeline = useQueryFirst(Timeline);
+  const screen = useTarget(timeline, ActiveScreen);
+  const data = useTrait(screen, Screen);
+  const timing = useTrait(timeline, Timeline);
+  const group = useRef<Group>(null);
+  const departure = useRef({ value: 0, from: 0, target: 0, delay: 0, duration: 0 });
+  const exitDuration = data?.codeComparisonVisible ? Math.min(0.9, timing?.duration ?? 0) : undefined;
+
+  useLayoutEffect(() => {
+    const motion = departure.current;
+    const returning = data?.packageEntry === 'rise';
+    if (returning && motion.value === 0) motion.value = 1;
+    motion.from = motion.value;
+    motion.target = data?.codeComparisonVisible ? 1 : 0;
+    motion.delay = returning ? data.packageDelay : 0;
+    motion.duration = returning ? data.packageDuration : Math.min(0.9, timing?.duration ?? 0);
+  }, [
+    data?.codeComparisonVisible,
+    data?.packageEntry,
+    data?.packageDelay,
+    data?.packageDuration,
+    timing,
+  ]);
+
+  useFrame(
+    (state) => {
+      if (!group.current) return;
+      const motion = departure.current;
+      const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - motion.delay;
+      const progress = motion.duration <= 0 ? 1 : clamp(elapsed / motion.duration, 0, 1);
+      motion.value = lerp(
+        motion.from,
+        motion.target,
+        motion.target === 1 ? easing.cubicIn(progress) : easing.cubicOut(progress)
+      );
+      const { height } = state.viewport.getCurrentViewport(state.camera, [0, 0, 0]);
+      group.current.position.y = -height * 1.5 * motion.value;
+    },
+    { priority: -0.5 }
+  );
 
   return (
-    <TextGroup name="packages">
-      {packages.map((entity) => (
-        <PackageView key={entity} entity={entity} timeline={timeline} />
-      ))}
-    </TextGroup>
+    <group ref={group} name="packages" renderOrder={1}>
+      <TextGroup>
+        {packages.map((entity) => (
+          <PackageView
+            key={entity}
+            entity={entity}
+            timeline={timeline}
+            solid={data?.background === 'solid'}
+            showDownloads={data?.packageDownloadsVisible ?? false}
+            showFeatures={data?.packageFeaturesVisible ?? false}
+            exitDuration={exitDuration}
+          />
+        ))}
+      </TextGroup>
+    </group>
   );
 }
 
-function PackageView({ entity, timeline }: { entity: Entity; timeline: Entity | undefined }) {
+function PackageView({
+  entity,
+  timeline,
+  solid,
+  showDownloads,
+  showFeatures,
+  exitDuration,
+}: {
+  entity: Entity;
+  timeline: Entity | undefined;
+  solid: boolean;
+  showDownloads: boolean;
+  showFeatures: boolean;
+  exitDuration: number | undefined;
+}) {
   const world = useWorld();
   const timing = useTrait(timeline, Timeline);
   const font = useMSDF(fonts.mono);
-  const { name, index } = useTrait(entity, Package)!;
-  const { radius } = useTrait(entity, Size)!;
+  const { name, label: displayLabel, index } = useTrait(entity, Package)!;
+  const nameLabel = displayLabel || name;
+  const { compressed: radius } = useTrait(entity, PackageSizing)!;
   const visible = !useHas(entity, Hidden);
   const [present, setPresent] = useState(visible);
   const progress = useRef(visible ? 1 : 0);
-  const transition = useRef({ from: visible ? 1 : 0, target: visible ? 1 : 0 });
+  const transition = useRef({
+    from: visible ? 1 : 0,
+    target: visible ? 1 : 0,
+    startedAt: 0,
+    delay: 0,
+    duration: 0,
+    spring: false,
+  });
   const groupRef = useRef<Group>(null);
   const meshRef = useRef<Mesh<BufferGeometry, GlassPhysicalNodeMaterial>>(null);
   const labelRef = useRef<ComponentRef<typeof Text>>(null);
@@ -68,29 +151,48 @@ function PackageView({ entity, timeline }: { entity: Entity; timeline: Entity | 
   // Fit the label inside the blob, but never below a readable floor
   const fontSize = Math.max(
     0.09,
-    Math.min(radius * 0.28, (radius * 1.9) / (name.length * MONO_ADVANCE))
+    Math.min(radius * 0.28, (radius * 1.9) / (nameLabel.length * MONO_ADVANCE))
   );
-  const width = Math.max(radius * 2, name.length * fontSize * MONO_ADVANCE);
+  const width = Math.max(radius * 2, nameLabel.length * fontSize * MONO_ADVANCE);
 
   const handleInit = useCallback(
     (group: Group | null) => {
       if (!group) return;
       groupRef.current = group;
-      group.scale.setScalar(Math.max(0.001, progress.current));
+      group.scale.setScalar(Math.max(0.001, (progress.current * entity.get(Size)!.radius) / radius));
       entity.add(Ref(group));
       return () => {
         groupRef.current = null;
         entity.remove(Ref);
       };
     },
-    [entity]
+    [entity, radius]
   );
 
   if (visible && !present) setPresent(true);
 
   useLayoutEffect(() => {
-    transition.current = { from: progress.current, target: visible ? 1 : 0 };
-  }, [visible, timing]);
+    const screen = timeline?.targetFor(ActiveScreen)?.get(Screen);
+    const names = screen?.packageNames ?? [];
+    const duration = timing?.duration ?? 0;
+    const entering = visible && progress.current === 0;
+    const returning = visible && screen?.packageEntry === 'rise';
+    const delay = entering ? (screen?.packageDelay ?? 0) : 0;
+    const stagger = entering
+      ? Math.min(screen?.packageStagger ?? 0, duration / Math.max(1, names.length))
+      : 0;
+    transition.current = {
+      from: returning ? 1 : progress.current,
+      target: visible ? 1 : 0,
+      startedAt: timing?.startedAt ?? world.get(Time)!.elapsed,
+      delay: delay + Math.max(0, names.indexOf(name)) * stagger,
+      // The final package settles before the shared screen transition finishes.
+      duration: returning
+        ? 0
+        : (exitDuration ?? duration - delay - Math.max(0, names.length - 1) * stagger),
+      spring: visible && screen?.packageLayout === 'pair',
+    };
+  }, [visible, timing, timeline, world, name, exitDuration]);
 
   // Keep the glass active until its exit finishes, and reverse from the current progress
   useFrame(
@@ -98,16 +200,24 @@ function PackageView({ entity, timeline }: { entity: Entity; timeline: Entity | 
       const group = groupRef.current;
       const mesh = meshRef.current;
       const label = labelRef.current;
-      const { from, target } = transition.current;
-      if (!group || !mesh || !label || progress.current === target) return;
+      const { from, target, startedAt, delay, duration, spring } = transition.current;
+      if (!group || !mesh || !label) return;
 
-      progress.current = lerp(from, target, getTransitionProgress(world));
+      const previousOpacity = clamp(progress.current, 0, 1);
+      const elapsed = world.get(Time)!.elapsed - startedAt - delay;
+      const time = duration <= 0 ? 1 : clamp(elapsed / duration, 0, 1);
+      const alpha = spring ? packageSpring(time) : easing.cubicOut(time);
+      progress.current = exitDuration !== undefined && time < 1 ? from : lerp(from, target, alpha);
 
-      group.scale.setScalar(Math.max(0.001, progress.current));
-      mesh.material.opacity = progress.current;
-      label.set({ style: { fontSize, lineHeight: 1, opacity: progress.current } });
+      const currentRadius = entity.get(Size)!.radius;
+      group.scale.setScalar(Math.max(0.001, (progress.current * currentRadius) / radius));
+      const opacity = clamp(progress.current, 0, 1);
+      mesh.material.opacity = opacity;
+      if (opacity !== previousOpacity) {
+        label.set({ style: { fontSize, lineHeight: 1, opacity } });
+      }
 
-      if (progress.current === 0) {
+      if (progress.current === 0 && target === 0) {
         group.visible = false;
         setPresent(false);
       }
@@ -116,40 +226,52 @@ function PackageView({ entity, timeline }: { entity: Entity; timeline: Entity | 
   );
 
   return (
-    <group ref={handleInit} visible={present}>
-      {/* Clear glass sphere. Drawn before the batched text so labels sit on the surface. */}
-      <mesh ref={meshRef} renderOrder={-1}>
-        <sphereGeometry args={[radius, 64, 48]} />
-        <GlassMaterial
-          enabled={present}
-          color={tintFor(index)}
-          transmission={1}
-          thickness={radius}
-          roughness={0}
-          ior={2.0}
-          dispersion={8}
-          anisotropicBlur={0}
-          attenuationDistance={0}
-          envMapIntensity={0.18}
-          samples={4}
-          backside
-          backsideThickness={radius * 2}
-          background={theme.background}
-        />
-      </mesh>
-      {/* Label sits on the glass surface and is kept out of the refraction capture */}
-      <Text
-        ref={labelRef}
-        font={font}
-        constraints={{ width: { mode: 'exact', size: width } }}
-        layout={{ align: 'center', wrap: 'none' }}
-        material={labelMaterial}
-        position={[-width / 2, fontSize / 2, radius + 0.02]}
-        userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
-        style={{ fontSize, lineHeight: 1 }}
-      >
-        {name}
-      </Text>
-    </group>
+    <>
+      <group ref={handleInit} visible={present} name={name} renderOrder={1}>
+        {/* Clear glass sphere. Drawn before the batched text so labels sit on the surface. */}
+        <mesh ref={meshRef} renderOrder={-1}>
+          <sphereGeometry args={[radius, 64, 48]} />
+          <GlassMaterial
+            enabled={present}
+            color={tintFor(index)}
+            transmission={1}
+            thickness={radius}
+            roughness={0}
+            ior={2.0}
+            dispersion={8}
+            anisotropicBlur={0}
+            attenuationDistance={0}
+            envMapIntensity={0.18}
+            samples={4}
+            backside
+            backsideThickness={radius * 2}
+            background={solid ? brand.green : theme.background}
+          />
+        </mesh>
+        {/* Label sits on the glass surface and is kept out of the refraction capture */}
+        <Text
+          ref={labelRef}
+          font={font}
+          constraints={{ width: { mode: 'exact', size: width } }}
+          layout={{ align: 'center', wrap: 'none' }}
+          material={solid ? focusedLabelMaterial : labelMaterial}
+          position={[-width / 2, fontSize / 2, radius + 0.02]}
+          userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
+          style={{ fontSize, lineHeight: 1 }}
+        >
+          {nameLabel}
+        </Text>
+      </group>
+      <PackageDownloads
+        entity={entity}
+        timeline={timeline}
+        radius={radius}
+        visible={showDownloads && visible}
+        exitDuration={exitDuration}
+      />
+      {name === 'three' && (
+        <PackageFeatures entity={entity} timeline={timeline} visible={showFeatures && visible} />
+      )}
+    </>
   );
 }
