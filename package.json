@@ -10,8 +10,10 @@
     "typecheck:watch": "tsc --build --watch",
     "lint": "oxlint -c .config/oxlint.json",
     "format": "prettier --config .config/prettier.json --ignore-path .config/prettierignore --write .",
-    "bake": "pnpm bake:geist && pnpm bake:geist-mono",
-    "bake:geist": "glyph bake --input public/fonts/Geist-Bold.ttf --output public/fonts/geist.font.glb --unicodes U+0020-007E --msdf --slug",
+    "bake": "pnpm bake:geist && pnpm bake:geist-mono && pnpm bake:geist-geometry && pnpm bake:code",
+    "bake:code": "node scripts/bake-code.mjs",
+    "bake:geist-geometry": "node scripts/bake-geist-geometry.mjs",
+    "bake:geist": "glyph bake --input public/fonts/Geist-Black.ttf --output public/fonts/geist-black.font.glb --unicodes U+0020-007E --msdf --slug",
     "bake:geist-mono": "glyph bake --input public/fonts/GeistMono-Medium.ttf --output public/fonts/geist-mono.font.glb --unicodes U+0020-007E --msdf --slug"
   },
   "dependencies": {
@@ -24,14 +26,17 @@
     "three": "~0.185.1"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@types/three": "~0.185.4",
     "@vitejs/plugin-react": "^6.1.1",
+    "opentype.js": "^2.0.0",
     "oxlint": "^1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.9.6",
+    "shiki": "^4.4.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   },

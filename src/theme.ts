@@ -4,8 +4,10 @@
  */
 
 export const fonts = {
-  /** Geist Bold — https://fonts.google.com/specimen/Geist */
-  sans: { baked: './fonts/geist.font.glb' },
+  /** Baked outlines for solid and extruded geometry. */
+  geometry: './fonts/geist-black.typeface.json',
+  /** Geist Black https://github.com/vercel/geist-font */
+  sans: { baked: './fonts/geist-black.font.glb' },
   /** Geist Mono Medium — https://fonts.google.com/specimen/Geist+Mono */
   mono: { baked: './fonts/geist-mono.font.glb' },
 } as const;
