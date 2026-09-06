@@ -1,7 +1,17 @@
 import type { World } from 'koota';
-import { Anchor, Bounds, Camera, Profile, Screen, ScreenTransition } from '../traits/index.js';
+import { mulberry32, random } from 'math/random';
+import {
+  Anchor,
+  Bounds,
+  Camera,
+  Float,
+  Profile,
+  Screen,
+  ScreenTransition,
+  Size,
+} from '../traits/index.js';
 
-/** Spread portraits across the destination framing with staggered depth for parallax. */
+/** Scatter portraits across the destination framing with staggered depth for parallax. */
 export function placeProfiles(world: World) {
   const bounds = world.get(Bounds);
   const camera = world.queryFirst(Camera)?.get(Camera);
@@ -11,22 +21,37 @@ export function placeProfiles(world: World) {
     ?.get(ScreenTransition);
   if (!bounds?.height || !camera || !destination) return;
 
-  const profiles = world.query(Profile, Anchor);
+  const profiles = world.query(Profile, Anchor, Size, Float);
   const aspect = bounds.width / bounds.height;
-  const rows = Math.max(1, Math.round(Math.sqrt(profiles.length / aspect)));
-  const columns = Math.ceil(profiles.length / rows);
+  const placed: { x: number; y: number; radius: number }[] = [];
 
-  profiles.updateEach(([profile, anchor]) => {
-    const row = Math.floor(profile.index / columns);
-    const count = Math.min(columns, profiles.length - row * columns);
+  profiles.updateEach(([profile, anchor, size, motion]) => {
+    const seed = mulberry32.create(profile.index + 1);
+    const sample = () => mulberry32.sample(seed);
     const halfHeight = (destination.cameraZ - anchor.z) * Math.tan((camera.fov * Math.PI) / 360);
-    anchor.x =
-      destination.cameraX +
-      ((((profile.index % columns) + 0.5) / count) * 2 - 1) * halfHeight * aspect * 0.86 +
-      Math.sin(profile.index * 2.4) * 0.12;
-    anchor.y =
-      destination.cameraY +
-      (1 - ((row + 0.5) / rows) * 2) * halfHeight * 0.85 +
-      Math.cos(profile.index * 1.7) * 0.16;
+    const radius = (size.radius + motion.amplitude + 0.05) / halfHeight;
+    const point = { x: 0, y: 0, radius };
+    let clearance = -Infinity;
+
+    // Pick the roomiest of a few seeded candidates, allowing space for the float orbit
+    for (let candidate = 0; candidate < 32; candidate++) {
+      const angle = random.float(sample, 0, Math.PI * 2);
+      const spread = Math.sqrt(random.float(sample, 0, 1));
+      const x = Math.cos(angle) * spread * Math.max(0, aspect - radius - 0.05);
+      const y = Math.sin(angle) * spread * Math.max(0, 1 - radius - 0.05);
+      let nearest = Infinity;
+      for (const other of placed) {
+        nearest = Math.min(nearest, Math.hypot(x - other.x, y - other.y) - radius - other.radius);
+      }
+      if (nearest > clearance) {
+        point.x = x;
+        point.y = y;
+        clearance = nearest;
+      }
+    }
+
+    placed.push(point);
+    anchor.x = destination.cameraX + point.x * halfHeight;
+    anchor.y = destination.cameraY + point.y * halfHeight;
   });
 }

@@ -3,23 +3,46 @@ import { random } from 'math/random';
 import { useEffect } from 'react';
 import { packages } from '../data/packages.js';
 import { profiles } from '../data/profiles.js';
-import { actions, radiusForDownloads, timelineActions } from '../sim/index.js';
+import {
+  actions,
+  compressedRadiusForDownloads,
+  radiusForDownloads,
+  timelineActions,
+} from '../sim/index.js';
 
 const WORD = 'PMNDRS';
 
 export function Startup() {
-  const { createCamera, createLetter, createPackage, createProfile } = useActions(actions);
+  const {
+    createCamera,
+    createTitle,
+    createCharter,
+    createInitiatives,
+    createLetter,
+    createPackage,
+    createProfile,
+    createPrinciplesConstellation,
+  } = useActions(actions);
   const { start, stop } = useActions(timelineActions);
 
   useEffect(() => {
     const camera = createCamera();
+    const title = createTitle();
+    const charter = createCharter();
+    const initiatives = createInitiatives();
+    const principles = createPrinciplesConstellation();
     const letters = Array.from(WORD, (char, index) => createLetter(char, index));
 
-    const counts = packages.map((pkg) => pkg.downloads);
-    const min = Math.min(...counts);
-    const max = Math.max(...counts);
+    const max = Math.max(...packages.map((pkg) => pkg.downloads));
+    const min = Math.min(...packages.map((pkg) => pkg.downloads));
     const blobs = packages.map((pkg, index) =>
-      createPackage(pkg.name, pkg.downloads, index, radiusForDownloads(pkg.downloads, min, max))
+      createPackage(
+        pkg.name,
+        pkg.downloads,
+        index,
+        compressedRadiusForDownloads(pkg.downloads, min, max),
+        radiusForDownloads(pkg.downloads, max)
+      )
     );
     // Shuffle depth slots independently of the portrait layout
     const depths = profiles.map((_, index) => index);
@@ -32,9 +55,30 @@ export function Startup() {
     return () => {
       stop();
       timeline.destroy();
-      for (const entity of [camera, ...letters, ...blobs, ...portraits]) entity.destroy();
+      for (const entity of [
+        camera,
+        title,
+        charter,
+        principles,
+        ...letters,
+        ...blobs,
+        ...portraits,
+        ...initiatives,
+      ])
+        entity.destroy();
     };
-  }, [createCamera, createLetter, createPackage, createProfile, start, stop]);
+  }, [
+    createCamera,
+    createTitle,
+    createCharter,
+    createInitiatives,
+    createLetter,
+    createPackage,
+    createProfile,
+    createPrinciplesConstellation,
+    start,
+    stop,
+  ]);
 
   return null;
 }

@@ -5,19 +5,29 @@ import { screens, type ScreenId } from './screens.js';
 import {
   ActiveScreen,
   Camera,
+  Charter,
+  Constellation,
+  ConstellationExpansion,
+  ConstellationMember,
   FirstScreen,
   Hidden,
+  Initiative,
+  Letter,
   NextScreen,
   Package,
+  PackageSizing,
   Position,
   PreviousScreen,
   Profile,
   Screen,
   ScreenOf,
   ScreenTransition,
+  Size,
+  SizeTransition,
   TargetPosition,
   Time,
   Timeline,
+  Title,
   TransitionOrigin,
 } from './traits/index.js';
 
@@ -60,14 +70,63 @@ export const timelineActions = createActions((world) => {
     for (const camera of world.query(Camera, TargetPosition)) {
       camera.set(TargetPosition, { x: cameraX, y: cameraY, z: cameraZ });
     }
-    const { packagesVisible, profilesVisible } = screen.get(Screen)!;
+    const {
+      titleVisible,
+      lettersVisible,
+      packagesVisible,
+      packageNames,
+      profilesVisible,
+      packageSizing,
+      constellation,
+      constellationMap,
+      charterVisible,
+      initiativesVisible,
+    } = screen.get(Screen)!;
+    for (const entity of world.query(Title)) {
+      if (titleVisible) entity.remove(Hidden);
+      else entity.add(Hidden);
+    }
+    world.query(PackageSizing, Size, SizeTransition).updateEach(([sizing, size, transition]) => {
+      transition.from = size.radius;
+      transition.to = sizing[packageSizing];
+    });
+    for (const entity of world.query(Letter)) {
+      if (lettersVisible) entity.remove(Hidden);
+      else entity.add(Hidden);
+    }
     for (const entity of world.query(Package)) {
-      if (packagesVisible) entity.remove(Hidden);
+      if (
+        packagesVisible &&
+        (packageNames.length === 0 || packageNames.includes(entity.get(Package)!.name))
+      )
+        entity.remove(Hidden);
       else entity.add(Hidden);
     }
     for (const entity of world.query(Profile)) {
       if (profilesVisible) entity.remove(Hidden);
       else entity.add(Hidden);
+    }
+    for (const entity of world.query(Charter)) {
+      if (charterVisible) entity.remove(Hidden);
+      else entity.add(Hidden);
+    }
+    for (const entity of world.query(Initiative)) {
+      if (initiativesVisible) entity.remove(Hidden);
+      else entity.add(Hidden);
+    }
+    for (const group of world.query(Constellation)) {
+      const visible = group.get(Constellation)!.id === constellation;
+      const expansion = group.get(ConstellationExpansion);
+      if (expansion) {
+        group.set(ConstellationExpansion, {
+          from: expansion.value,
+          to: visible && constellationMap ? 1 : 0,
+        });
+      }
+      for (const entity of [group, ...world.query(ConstellationMember(group))]) {
+        if (visible) entity.remove(Hidden);
+        else entity.add(Hidden);
+      }
     }
     timeline.add(ActiveScreen(screen));
   };
@@ -79,8 +138,14 @@ export const timelineActions = createActions((world) => {
       return timeline;
     },
     stop: () => {
+      for (const entity of world.query(Title)) entity.add(Hidden);
+      for (const entity of world.query(Letter, Hidden)) entity.remove(Hidden);
       for (const entity of world.query(Package, Hidden)) entity.remove(Hidden);
       for (const entity of world.query(Profile)) entity.add(Hidden);
+      for (const entity of world.query(Charter)) entity.add(Hidden);
+      for (const entity of world.query(Initiative)) entity.add(Hidden);
+      for (const entity of world.query(Constellation)) entity.add(Hidden);
+      for (const entity of world.query(ConstellationMember('*'))) entity.add(Hidden);
       const timeline = world.queryFirst(Timeline);
       timeline?.remove(ActiveScreen('*'));
       timeline?.set(Timeline, { duration: 0 });
@@ -113,4 +178,30 @@ export function getTransitionProgress(world: World) {
 
   const progress = clamp((world.get(Time)!.elapsed - timing.startedAt) / timing.duration, 0, 1);
   return easing.cubicOut(progress);
+}
+
+/** Views that opt in can hold until the screen's reveal delay, then ease in over the rest. */
+export function getRevealProgress(world: World) {
+  const timeline = world.queryFirst(Timeline);
+  const timing = timeline?.get(Timeline);
+  if (!timeline || !timing || timing.duration <= 0) return 1;
+
+  const delay = timeline.targetFor(ActiveScreen)?.get(ScreenTransition)?.revealDelay ?? 0;
+  if (delay <= 0) return getTransitionProgress(world);
+  const elapsed = world.get(Time)!.elapsed - timing.startedAt - delay;
+  return easing.cubicOut(clamp(elapsed / Math.max(0.001, timing.duration - delay), 0, 1));
+}
+
+/** Camera timing can hold at the origin for a beat and then ease out over the remaining time. */
+export function getCameraProgress(world: World) {
+  const timeline = world.queryFirst(Timeline);
+  const timing = timeline?.get(Timeline);
+  if (!timeline || !timing || timing.duration <= 0) return 1;
+
+  const delay = timeline.targetFor(ActiveScreen)?.get(ScreenTransition)?.cameraDelay ?? 0;
+  if (delay <= 0) return getTransitionProgress(world);
+  const elapsed = world.get(Time)!.elapsed - timing.startedAt - delay;
+  const progress = clamp(elapsed / Math.max(0.001, timing.duration - delay), 0, 1);
+  // A held camera builds slowly, jumps to speed like a warp drive, and glides in at the end
+  return easing.expoInOut(progress);
 }

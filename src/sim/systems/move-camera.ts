@@ -1,6 +1,6 @@
 import type { World } from 'koota';
 import { lerp } from 'math';
-import { getTransitionProgress } from '../timeline.js';
+import { getCameraProgress } from '../timeline.js';
 import {
   ActiveScreen,
   Camera,
@@ -12,7 +12,7 @@ import {
 
 export function moveCamera(world: World) {
   if (!world.queryFirst(Timeline)?.targetFor(ActiveScreen)) return;
-  const alpha = getTransitionProgress(world);
+  const alpha = getCameraProgress(world);
 
   world
     .query(Camera, Position, TargetPosition, TransitionOrigin)

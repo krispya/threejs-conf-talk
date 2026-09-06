@@ -1,16 +1,7 @@
 import type { World } from 'koota';
 import { Anchor, Bounds, Camera, Letter, ScreenTransition } from '../traits/index.js';
 
-const MAX_SPACING = 3.3;
-const MARGIN = 2;
-const ROW_OFFSET = 1.3;
-
-/**
- * Lays the slots out left-to-right in Letter.index order and staggers them into two rows:
- *
- *   P      N      R
- *       M      D      S
- */
+/** Align letter anchors on one baseline, with individual motion handled by floatBodies. */
 export function updateAnchors(world: World) {
   const bounds = world.get(Bounds);
   if (!bounds || bounds.width === 0) return;
@@ -19,21 +10,21 @@ export function updateAnchors(world: World) {
   const count = letters.length;
   if (count === 0) return;
 
-  // Hold the closest front-facing screen's layout as the camera flies through the word
+  // Frame the word for the closest front-facing screen so camera movement never respaces it
   const camera = world.queryFirst(Camera)?.get(Camera);
   const distance = world.query(ScreenTransition).reduce((closest, entity) => {
     const z = entity.get(ScreenTransition)!.cameraZ;
     return z > 0 ? Math.min(closest, z) : closest;
   }, Infinity);
-  const minWidth =
+  const width =
     camera && Number.isFinite(distance) && bounds.height > 0
       ? 2 * distance * Math.tan((camera.fov * Math.PI) / 360) * (bounds.width / bounds.height)
-      : 0;
-  const spacing = Math.min(MAX_SPACING, (Math.max(bounds.width, minWidth) - MARGIN) / count);
+      : bounds.width;
+  const spacing = Math.min(2.4, Math.max(0, width - 1.8) / Math.max(1, count - 1));
 
   letters.updateEach(([letter, anchor]) => {
     anchor.x = (letter.index - (count - 1) / 2) * spacing;
-    anchor.y = letter.index % 2 === 0 ? ROW_OFFSET : -ROW_OFFSET;
+    anchor.y = 0;
     anchor.z = 0;
   });
 }

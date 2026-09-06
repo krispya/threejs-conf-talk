@@ -5,9 +5,11 @@ import { systems } from '../sim/index.js';
 const {
   updateTime,
   moveCamera,
+  resizePackages,
   updateAnchors,
   placePackages,
   placeProfiles,
+  layoutConstellations,
   floatBodies,
   syncTransforms,
   updateBounds,
@@ -19,9 +21,11 @@ export function FrameLoop() {
   useFrame((state, delta) => {
     updateTime(world, delta, state.elapsed);
     moveCamera(world);
+    resizePackages(world);
     updateAnchors(world);
     placePackages(world);
     placeProfiles(world);
+    layoutConstellations(world);
     floatBodies(world);
     syncTransforms(world);
 

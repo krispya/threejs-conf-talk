@@ -1,4 +1,4 @@
-/** pmndrs libraries by weekly npm downloads, one entry per library (largest package counted). */
+/** Libraries by weekly npm downloads, one entry per library (largest package counted). */
 export const packages = [
   { name: 'zustand', downloads: 54_493_939 },
   { name: 'use-gesture', downloads: 6_814_965 },
@@ -17,4 +17,6 @@ export const packages = [
   { name: 'react-three-csg', downloads: 48_520 },
   { name: 'uikit', downloads: 17_019 },
   { name: 'koota', downloads: 13_025 },
+  // npm downloads for 2026-08-23 through 2026-08-29, matching the R3F snapshot
+  { name: 'three', downloads: 15_193_062 },
 ] as const;
