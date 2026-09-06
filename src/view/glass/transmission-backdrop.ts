@@ -157,7 +157,8 @@ export class TransmissionBackdropManager {
             side: material.side,
           });
           material.side = BackSide;
-          material.transmissionUniforms.thickness.value = config.backsideThickness;
+          material.transmissionUniforms.thickness.value =
+            material.transmissionBackdropConfig.backsideThickness;
         }
 
         renderer.setRenderTarget(this.backsideTarget);
