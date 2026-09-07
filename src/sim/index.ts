@@ -3,6 +3,7 @@ export { world } from './world.js';
 export { actions, compressedRadiusForDownloads, radiusForDownloads } from './actions.js';
 export { screens, type ScreenId } from './screens.js';
 export {
+  advanceTimeline,
   getCameraProgress,
   getRevealProgress,
   getTransitionProgress,

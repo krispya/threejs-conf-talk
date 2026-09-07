@@ -39,16 +39,22 @@ function createScene(t) {
 
   const timelineEntity = timeline.start();
   const titleScreen = timelineEntity.targetFor(sim.FirstScreen);
-  const intro = titleScreen.targetFor(sim.NextScreen);
+  const launch = titleScreen.targetFor(sim.NextScreen);
+  const intro = launch.targetFor(sim.NextScreen);
   const comparison = intro.targetFor(sim.NextScreen);
   const threeFeatures = comparison.targetFor(sim.NextScreen);
-  const packageSizes = threeFeatures.targetFor(sim.NextScreen);
+  const robot = threeFeatures.targetFor(sim.NextScreen);
+  const warp = robot.targetFor(sim.NextScreen);
+  const packageOverview = warp.targetFor(sim.NextScreen);
+  const packageSizes = packageOverview.targetFor(sim.NextScreen);
   const letters = packageSizes.targetFor(sim.NextScreen);
   const contributors = letters.targetFor(sim.NextScreen);
-  const constellation = contributors.targetFor(sim.NextScreen);
-  const principlesScreen = constellation.targetFor(sim.NextScreen);
-  const charterScreen = principlesScreen.targetFor(sim.NextScreen);
+  const charterScreen = contributors.targetFor(sim.NextScreen);
   const initiativesScreen = charterScreen.targetFor(sim.NextScreen);
+  const constellation = initiativesScreen.targetFor(sim.NextScreen);
+  const principlesScreen = world
+    .query(sim.Screen)
+    .find((entity) => entity.get(sim.Screen).id === 'principles');
   return {
     world,
     camera,
@@ -61,9 +67,13 @@ function createScene(t) {
     profiles,
     timeline,
     timelineEntity,
+    launch,
     intro,
     comparison,
     threeFeatures,
+    robot,
+    warp,
+    packageOverview,
     packageSizes,
     letters,
     contributors,
@@ -80,13 +90,14 @@ function advance(world, seconds, fps = 60) {
   for (let frame = 0; frame < seconds * fps; frame++) {
     const elapsed = start + Math.min((frame + 1) / fps, seconds);
     sim.systems.updateTime(world, elapsed - world.get(sim.Time).elapsed, elapsed);
+    sim.advanceTimeline(world);
     sim.systems.moveCamera(world);
     sim.systems.resizePackages(world);
     sim.systems.layoutConstellations(world);
   }
 }
 
-void test('moves through counts, code, and Three features before showing all packages', (t) => {
+void test('holds at warp until advancing to counts, code, Three features, and the robot', (t) => {
   const {
     world,
     camera,
@@ -96,9 +107,13 @@ void test('moves through counts, code, and Three features before showing all pac
     packages,
     timeline,
     timelineEntity,
+    launch,
     intro,
     comparison,
     threeFeatures,
+    robot,
+    warp,
+    packageOverview,
     packageSizes,
     letters,
   } = createScene(t);
@@ -108,6 +123,7 @@ void test('moves through counts, code, and Three features before showing all pac
   ];
   for (const entity of featured) entity.add(sim.Hidden);
   const allPackages = [...packages, ...featured];
+  const pmndrsPackages = [...packages, featured[0]];
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), titleScreen);
   assert.equal(title.get(sim.Title).text.replaceAll('\n', ' '), 'Beyond React Three Fiber');
   assert.equal(titleScreen.get(sim.Screen).background, 'solid');
@@ -116,10 +132,20 @@ void test('moves through counts, code, and Three features before showing all pac
   assert(allPackages.every((entity) => entity.has(sim.Hidden)));
 
   timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), launch);
+  assert.equal(launch.get(sim.Screen).id, 'warp-launch');
+  assert(!title.has(sim.Hidden));
+  advance(world, 8);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), launch);
+  assert(allPackages.every((entity) => entity.has(sim.Hidden)));
+  assert.equal(launch.get(sim.Screen).packageDownloadsVisible, false);
+
+  timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), intro);
   assert(!title.has(sim.Hidden));
   assert(letter.has(sim.Hidden));
   assert.equal(intro.get(sim.Screen).background, titleScreen.get(sim.Screen).background);
+  assert.equal(intro.get(sim.Screen).packageDownloadsVisible, true);
   assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(featured));
   world.set(sim.Bounds, { width: 16, height: 9 });
   advance(world, intro.get(sim.ScreenTransition).duration);
@@ -155,9 +181,46 @@ void test('moves through counts, code, and Three features before showing all pac
   advance(world, threeFeatures.get(sim.ScreenTransition).duration);
   assert.equal(camera.get(sim.Position).z, 12);
   timeline.next();
-  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageSizes);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), robot);
+  assert.equal(robot.get(sim.Screen).robotVisible, true);
+  assert.equal(robot.get(sim.Screen).packageFeaturesVisible, true);
+  assert(!title.has(sim.Hidden));
+  assert(letter.has(sim.Hidden));
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(featured));
+  advance(world, robot.get(sim.ScreenTransition).duration);
+  assert.equal(camera.get(sim.Position).z, 12);
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), threeFeatures);
+  assert.equal(threeFeatures.get(sim.Screen).robotVisible, false);
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(featured));
+  timeline.next();
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), warp);
+  assert(allPackages.every((entity) => entity.has(sim.Hidden)));
+  assert(!title.has(sim.Hidden));
+  advance(world, warp.get(sim.ScreenTransition).duration + 1 / 60);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageOverview);
   assert(title.has(sim.Hidden));
-  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(allPackages));
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(pmndrsPackages));
+  advance(world, packageOverview.get(sim.ScreenTransition).duration);
+  assert(
+    allPackages.every(
+      (entity) => entity.get(sim.Size).radius === entity.get(sim.PackageSizing).compressed
+    )
+  );
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageSizes);
+  const beforeGrowth = packages[0].get(sim.Size).radius;
+  advance(world, packageSizes.get(sim.ScreenTransition).duration / 2);
+  assert(packages[0].get(sim.Size).radius > beforeGrowth);
+  assert(packages[0].get(sim.Size).radius < packages[0].get(sim.PackageSizing).proportional);
+  advance(world, packageSizes.get(sim.ScreenTransition).duration / 2);
+  assert(
+    allPackages.every(
+      (entity) => entity.get(sim.Size).radius === entity.get(sim.PackageSizing).proportional
+    )
+  );
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(pmndrsPackages));
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), letters);
   assert.equal(world.query(sim.Package, Not(sim.Hidden)).length, 0);
@@ -168,11 +231,23 @@ void test('moves through counts, code, and Three features before showing all pac
 
   timeline.previous();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageSizes);
-  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(allPackages));
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(pmndrsPackages));
   assert.equal(camera.get(sim.Position).z, 8);
   advance(world, packageSizes.get(sim.ScreenTransition).duration);
   assert.equal(camera.get(sim.Position).z, 12);
   assert.deepEqual([...world.query(sim.Letter)], [letter]);
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageOverview);
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(pmndrsPackages));
+  advance(world, packageOverview.get(sim.ScreenTransition).duration);
+  assert(
+    allPackages.every(
+      (entity) => entity.get(sim.Size).radius === entity.get(sim.PackageSizing).compressed
+    )
+  );
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), robot);
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(featured));
   timeline.previous();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), threeFeatures);
   assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(featured));
@@ -183,9 +258,39 @@ void test('moves through counts, code, and Three features before showing all pac
   assert(!title.has(sim.Hidden));
   assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(featured));
   timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), launch);
+  assert(allPackages.every((entity) => entity.has(sim.Hidden)));
+  timeline.previous();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), titleScreen);
   assert.deepEqual([...world.query(sim.Title, Not(sim.Hidden))], [title]);
   assert(allPackages.every((entity) => entity.isAlive() && entity.has(sim.Hidden)));
+});
+
+void test('warp hands off automatically and cancels when navigating back', (t) => {
+  const { world, timeline, timelineEntity, robot, warp, packageOverview, packages } = createScene(t);
+  timeline.goTo('robot');
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), warp);
+  assert(warp.get(sim.Screen).warpVisible);
+  assert(packages.every((entity) => entity.has(sim.Hidden)));
+  advance(world, warp.get(sim.ScreenTransition).duration - 0.1);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), warp);
+  advance(world, 0.2);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageOverview);
+  assert.equal(packageOverview.get(sim.Screen).packageEntry, 'scale');
+  assert(
+    packageOverview.get(sim.Screen).packageDelay >= 0.5,
+    'Packages wait a beat after the portal'
+  );
+  assert(packages.every((entity) => !entity.has(sim.Hidden)));
+
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), robot);
+  timeline.next();
+  advance(world, 0.5);
+  timeline.previous();
+  advance(world, 4);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), robot);
 });
 
 void test('navigation stops at the ends and supports named screens', (t) => {
@@ -208,17 +313,19 @@ void test('navigation stops at the ends and supports named screens', (t) => {
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), contributors);
   timeline.next();
-  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), constellation);
-  timeline.next();
-  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), principlesScreen);
-  timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), charterScreen);
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), initiativesScreen);
   timeline.next();
-  assert.equal(timelineEntity.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'initiatives');
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), constellation);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'portal-fall');
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'initiatives');
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), principlesScreen);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), principlesScreen);
   timeline.goTo('letters');
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), letters);
   assert.equal(world.query(sim.Package, Not(sim.Hidden)).length, 0);
@@ -322,17 +429,19 @@ void test('the camera eases consistently and reverses smoothly during a transiti
   assert.equal(a.camera.get(sim.Position).z, 12);
 });
 
-void test('pulls far back while keeping PMNDRS and its contributors visible', (t) => {
-  const { world, camera, letter, packages, profiles, timeline, contributors, constellation } =
+void test('keeps PMNDRS and profiles visible for scale during the ejection', (t) => {
+  const { world, camera, letter, packages, profiles, timeline, initiativesScreen, constellation } =
     createScene(t);
-  timeline.goTo('profiles');
-  advance(world, contributors.get(sim.ScreenTransition).duration);
+  timeline.goTo('charter-initiatives');
+  advance(world, initiativesScreen.get(sim.ScreenTransition).duration);
   timeline.next();
   assert([letter, ...profiles].every((entity) => !entity.has(sim.Hidden)));
   assert(packages.every((entity) => entity.has(sim.Hidden)));
   assert.equal(constellation.get(sim.Screen).backgroundVisible, true);
   assert.equal(constellation.get(sim.Screen).background, 'stars');
-  advance(world, constellation.get(sim.ScreenTransition).duration / 2);
+  assert.equal(constellation.get(sim.Screen).initiativesVisible, false);
+  const { duration, cameraDelay } = constellation.get(sim.ScreenTransition);
+  advance(world, cameraDelay + (duration - cameraDelay) / 2);
   const midway = camera.get(sim.Position).z;
   assert(midway > 12 && midway < 120);
 
@@ -340,19 +449,19 @@ void test('pulls far back while keeping PMNDRS and its contributors visible', (t
   assert.equal(camera.get(sim.Position).z, midway);
   assert.equal(letter.has(sim.Hidden), false);
   assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
-  assert.equal(contributors.get(sim.Screen).backgroundVisible, true);
-  assert.equal(contributors.get(sim.Screen).background, 'pastel');
-  advance(world, contributors.get(sim.ScreenTransition).duration);
+  assert.equal(initiativesScreen.get(sim.Screen).backgroundVisible, true);
+  assert.equal(initiativesScreen.get(sim.Screen).background, 'pastel');
+  advance(world, initiativesScreen.get(sim.ScreenTransition).duration);
   assert.equal(camera.get(sim.Position).z, -5);
 
   timeline.next();
-  advance(world, constellation.get(sim.ScreenTransition).duration);
-  assert.equal(camera.get(sim.Position).z, 120);
+  advance(world, constellation.get(sim.ScreenTransition).duration + 0.2);
+  assert(camera.get(sim.Position).z >= 120 && camera.get(sim.Position).z < 121);
   assert([letter, ...profiles].every((entity) => entity.isAlive() && !entity.has(sim.Hidden)));
   assert(profiles.every((entity) => camera.get(sim.Camera).far > 120 - entity.get(sim.Anchor).z));
 });
 
-void test('profiles keep drifting in space while the letters stay stable', (t) => {
+void test('profiles resume their floating motion after leaving the sphere preview', (t) => {
   const { world, camera, letter, profiles, timeline } = createScene(t);
   timeline.goTo('package-sizes');
   world.set(sim.Bounds, { width: 16, height: 9 });
@@ -373,28 +482,21 @@ void test('profiles keep drifting in space while the letters stay stable', (t) =
     return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
   };
 
-  const letterMotion = motionOnScreen(letter);
+  assert(motionOnScreen(letter) > 0);
   timeline.goTo('profiles');
   advance(world, 3);
   const profileMotion = motionOnScreen(profiles[0]);
-  timeline.goTo('constellation');
-  advance(world, 3);
-  const distantLetterMotion = motionOnScreen(letter);
-  assert(distantLetterMotion > 0, 'The letters should retain a gentle float');
-  assert(distantLetterMotion < letterMotion / 3, 'The distant word should stay stable');
-  const distantProfileMotion = motionOnScreen(profiles[0]);
-  assert(distantProfileMotion > 0.01, 'Portrait drift should remain visible in the viewport');
-  assert(Math.abs(distantProfileMotion / profileMotion - 1) < 0.05);
+  timeline.goTo('initiatives');
+  advance(world, 1);
+  assert.equal(motionOnScreen(letter), 0);
+  assert.equal(motionOnScreen(profiles[0]), 0);
 
-  const before = { ...profiles[0].get(sim.Position) };
-  timeline.previous();
-  sim.systems.floatBodies(world);
-  assert.deepEqual(profiles[0].get(sim.Position), before);
+  timeline.goTo('profiles');
   advance(world, 3);
   assert(Math.abs(motionOnScreen(profiles[0]) - profileMotion) < 1e-9);
 });
 
-void test('travel to the principles star map and return smoothly to the wide view', (t) => {
+void test('travels from the sphere preview to principles and returns smoothly', (t) => {
   const { world, camera, letter, profiles, timeline, principlesConstellation, principlesScreen } =
     createScene(t);
   const stars = [
@@ -411,10 +513,10 @@ void test('travel to the principles star map and return smoothly to the wide vie
     stars.every((star) => connections.includes(star) || star.targetsFor(sim.ConnectedTo).length > 0)
   );
 
-  timeline.goTo('constellation');
-  advance(world, 3);
-  assert(!principlesConstellation.has(sim.Hidden));
-  assert(stars.every((star) => !star.has(sim.Hidden)));
+  timeline.goTo('initiatives');
+  advance(world, 5);
+  assert(principlesConstellation.has(sim.Hidden));
+  assert(stars.every((star) => star.has(sim.Hidden)));
 
   world.set(sim.Bounds, { width: 16, height: 9 });
   sim.systems.floatBodies(world);
@@ -425,16 +527,6 @@ void test('travel to the principles star map and return smoothly to the wide vie
   assert(Math.abs(pmndrsOverview.x) < 0.85 && Math.abs(pmndrsOverview.y) < 0.85);
   const compact = stars.map((star) => ({ ...star.get(sim.Anchor) }));
   assert.equal(principlesScreen.get(sim.Screen).constellationMap, true);
-  for (const star of stars) {
-    const point = new Vector3()
-      .copy(star.get(sim.Position))
-      .add(principlesConstellation.get(sim.Position))
-      .project(overview);
-    assert(
-      Math.abs(point.x) < 0.85 && Math.abs(point.y) < 0.85,
-      'All four stars should fit in the night sky'
-    );
-  }
   timeline.next();
   assert(!principlesConstellation.has(sim.Hidden));
   assert(stars.every((star) => !star.has(sim.Hidden)));
@@ -454,8 +546,8 @@ void test('travel to the principles star map and return smoothly to the wide vie
     stars.map((star) => star.get(sim.Anchor)),
     halfwayAnchors
   );
-  assert(stars.every((star) => !star.has(sim.Hidden) && star.isAlive()));
-  advance(world, 3);
+  assert(stars.every((star) => star.has(sim.Hidden) && star.isAlive()));
+  advance(world, 5);
   assert.equal(camera.get(sim.Position).x, 0);
   assert.deepEqual(
     stars.map((star) => star.get(sim.Anchor)),
@@ -505,47 +597,39 @@ void test('travel to the principles star map and return smoothly to the wide vie
   assert(stars.every((star) => !star.isAlive()));
 });
 
-void test('shows the charter over the principles without moving the camera or recreating the scene', (t) => {
-  const {
-    world,
-    camera,
-    charter,
-    timeline,
-    timelineEntity,
-    principlesConstellation,
-    principlesScreen,
-    charterScreen,
-  } = createScene(t);
+void test('drops the charter over the pastel profiles without moving the camera', (t) => {
+  const { world, camera, charter, timeline, timelineEntity, profiles, contributors, charterScreen } =
+    createScene(t);
   const stars = [...world.query(sim.Principle)];
   assert(charter.has(sim.Hidden));
-  timeline.goTo('principles');
-  advance(world, principlesScreen.get(sim.ScreenTransition).duration);
-  const mapCamera = { ...camera.get(sim.Position) };
+  timeline.goTo('profiles');
+  advance(world, contributors.get(sim.ScreenTransition).duration);
+  const profileCamera = { ...camera.get(sim.Position) };
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), charterScreen);
-  assert.equal(charterScreen.get(sim.Screen).background, 'stars');
-  assert.equal(charterScreen.get(sim.Screen).constellationMap, true);
+  assert.equal(charterScreen.get(sim.Screen).background, 'pastel');
   assert(!charter.has(sim.Hidden));
-  assert(stars.every((star) => !star.has(sim.Hidden)));
+  assert(stars.every((star) => star.has(sim.Hidden)));
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
 
   const duration = charterScreen.get(sim.ScreenTransition).duration;
   advance(world, duration / 3);
-  assert.deepEqual(camera.get(sim.Position), mapCamera);
+  assert.deepEqual(camera.get(sim.Position), profileCamera);
   timeline.previous();
-  assert.deepEqual(camera.get(sim.Position), mapCamera);
+  assert.deepEqual(camera.get(sim.Position), profileCamera);
   assert(charter.has(sim.Hidden));
-  assert.equal(principlesScreen.get(sim.Screen).background, 'stars');
-  advance(world, principlesScreen.get(sim.ScreenTransition).duration);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), contributors);
+  assert.equal(contributors.get(sim.Screen).background, 'pastel');
+  advance(world, contributors.get(sim.ScreenTransition).duration);
 
   timeline.next();
   advance(world, duration);
   sim.systems.floatBodies(world);
   const position = camera.get(sim.Position);
-  const origin = principlesConstellation.get(sim.Position);
-  assert.deepEqual(position, mapCamera);
-  assert(stars.every((star) => star.get(sim.Position).z + origin.z < charter.get(sim.Position).z));
+  assert.deepEqual(position, profileCamera);
+  assert(profiles.every((profile) => profile.get(sim.Position).z < charter.get(sim.Position).z));
   assert(charter.get(sim.Position).z < position.z);
-  assert.equal(principlesConstellation.get(sim.ConstellationExpansion).value, 1);
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
   assert.deepEqual([...world.query(sim.Charter, Not(sim.Hidden))], [charter]);
   assert.deepEqual([...world.query(sim.Principle)], stars);
   timeline.stop();
@@ -563,7 +647,7 @@ void test('highlights Initiatives in a follow-up step while keeping the charter 
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), initiativesScreen);
   assert.equal(initiativesScreen.get(sim.Screen).charterHighlight, 'initiatives');
-  assert.equal(initiativesScreen.get(sim.Screen).background, 'stars');
+  assert.equal(initiativesScreen.get(sim.Screen).background, 'pastel');
   assert(!charter.has(sim.Hidden));
   advance(world, initiativesScreen.get(sim.ScreenTransition).duration / 2);
   assert.deepEqual(camera.get(sim.Position), position);
@@ -580,56 +664,56 @@ void test('highlights Initiatives in a follow-up step while keeping the charter 
   assert.deepEqual(camera.get(sim.Position), position);
 });
 
-void test('returns from the charter to initiative destinations and retains discoveries on a revisit', (t) => {
-  const { world, camera, charter, initiatives, timeline, timelineEntity } = createScene(t);
-  assert(initiatives.every((entity) => entity.has(sim.Hidden)));
-  timeline.goTo('constellation');
-  advance(world, 3);
-  assert.deepEqual([...world.query(sim.Initiative, Not(sim.Hidden))], initiatives);
-  assert.deepEqual(
-    initiatives
-      .filter((entity) => !entity.get(sim.Initiative).secret)
-      .map((entity) => entity.get(sim.Initiative).title),
-    ['Math', 'Glyph', 'Design System', 'React Three Fiber v10']
-  );
-  const games = initiatives.find((entity) => entity.get(sim.Initiative).secret);
-  assert.equal(games.get(sim.Initiative).id, 'games');
-  assert(!games.has(sim.Discovered));
-
-  const view = new PerspectiveCamera(camera.get(sim.Camera).fov, 16 / 9, 0.1, 500);
-  view.position.copy(camera.get(sim.Position));
-  view.updateMatrixWorld();
-  for (const entity of initiatives) {
-    const point = new Vector3().copy(entity.get(sim.Position)).project(view);
-    assert(
-      Math.abs(point.x) < 0.85 && Math.abs(point.y) < 0.85,
-      'Destinations should fit in the space view'
-    );
-  }
-  games.add(sim.Discovered);
+void test('ejects into space, returns through the portal at PMNDRS, and stops on the sphere preview', (t) => {
+  const { world, camera, timeline, timelineEntity, charter, profiles, letter, initiatives } =
+    createScene(t);
   timeline.goTo('charter-initiatives');
   advance(world, 2);
+  timeline.next();
+  assert(charter.has(sim.Hidden));
+  assert([letter, ...profiles].every((entity) => !entity.has(sim.Hidden)));
   assert(initiatives.every((entity) => entity.has(sim.Hidden)));
+  advance(world, 4.7);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'portal-fall');
+  assert([letter, ...profiles].every((entity) => !entity.has(sim.Hidden)));
+  advance(world, 1.2);
+  const floating = { ...camera.get(sim.Position) };
+  assert(floating.z > 120 && floating.y > 0, 'Drift upward and away while the portal opens');
+  advance(world, 1.1);
+  const recoil = { ...camera.get(sim.Position) };
+  assert(recoil.z > floating.z + 3, 'Recoil from the warning before being pulled back');
+  assert(recoil.y > floating.y);
+  advance(world, 0.3);
+  const crest = camera.get(sim.Position).z;
+  advance(world, 0.5);
+  const approach = camera.get(sim.Position).z;
+  assert(approach < crest);
+  advance(world, 0.5);
+  assert(approach - camera.get(sim.Position).z > crest - approach, 'Accelerate back toward PMNDRS');
+  advance(world, 2);
+  assert.equal(camera.get(sim.Position).z, -18, 'Cross the portal at the word origin');
+  assert([letter, ...profiles].every((entity) => entity.has(sim.Hidden)));
+  const preview = timelineEntity.targetFor(sim.ActiveScreen);
+  assert.equal(preview.get(sim.Screen).id, 'initiatives');
+  assert.equal(preview.get(sim.Screen).initiativesVisible, true);
+  advance(world, 10);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), preview);
+
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'charter-initiatives');
   assert(!charter.has(sim.Hidden));
   timeline.next();
-  assert.equal(timelineEntity.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'initiatives');
-  assert(charter.has(sim.Hidden));
-  advance(world, timelineEntity.targetFor(sim.ActiveScreen).get(sim.ScreenTransition).duration);
-  assert.deepEqual(camera.get(sim.Position), { x: 0, y: 0, z: 120 });
-  assert.deepEqual([...world.query(sim.Initiative, Not(sim.Hidden))], initiatives);
-  assert(games.has(sim.Discovered));
+  advance(world, 5);
   timeline.previous();
-  assert(!charter.has(sim.Hidden));
-  assert(initiatives.every((entity) => entity.has(sim.Hidden)));
-  timeline.stop();
-  assert(initiatives.every((entity) => entity.isAlive() && entity.has(sim.Hidden)));
+  advance(world, 8);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen).get(sim.Screen).id, 'charter-initiatives');
 });
 
 void test('holds the camera on the charter while it collapses, then pulls away', (t) => {
   const { world, camera, charter, timeline, timelineEntity } = createScene(t);
   timeline.goTo('charter-initiatives');
   advance(world, timelineEntity.targetFor(sim.ActiveScreen).get(sim.ScreenTransition).duration);
-  assert.deepEqual(camera.get(sim.Position), { x: 106, y: 8, z: -20 });
+  assert.deepEqual(camera.get(sim.Position), { x: 0, y: 0, z: -5 });
 
   timeline.next();
   const { duration, cameraDelay } = timelineEntity
@@ -638,12 +722,12 @@ void test('holds the camera on the charter while it collapses, then pulls away',
   assert(cameraDelay > 1, 'The charter needs a beat to fall in before the camera leaves');
   assert(charter.has(sim.Hidden));
   advance(world, cameraDelay);
-  assert.deepEqual(camera.get(sim.Position), { x: 106, y: 8, z: -20 });
-  assert.equal(sim.getRevealProgress(world), 0, 'Initiatives wait for warp speed');
+  assert.deepEqual(camera.get(sim.Position), { x: 0, y: 0, z: -5 });
+  assert.equal(sim.getRevealProgress(world), 0, 'The space reveal waits for the black hole');
   advance(world, (duration - cameraDelay) / 2);
   assert(camera.get(sim.Position).z > 0 && camera.get(sim.Position).z < 120);
   advance(world, (duration - cameraDelay) / 2);
-  assert.deepEqual(camera.get(sim.Position), { x: 0, y: 0, z: 120 });
+  assert(Math.abs(camera.get(sim.Position).z - 120) < 0.001);
 });
 
 void test('floating portraits stay in separate depth layers up close and in space', async (t) => {

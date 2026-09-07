@@ -20,6 +20,9 @@ export const Screen = trait({
   packageDownloadsVisible: false,
   packageFeaturesVisible: false,
   codeComparisonVisible: false,
+  robotVisible: false,
+  warpVisible: false,
+  autoAdvance: false,
   packageSizing: 'compressed' as 'compressed' | 'proportional',
   profilesVisible: false,
   backgroundVisible: true,
@@ -29,10 +32,12 @@ export const Screen = trait({
   charterVisible: false,
   charterHighlight: '' as '' | 'initiatives',
   initiativesVisible: false,
+  initiativePortalVisible: false,
 });
 export const ScreenTransition = trait({
   duration: 0,
   cameraDelay: 0,
+  cameraEase: 'auto' as 'auto' | 'cubicIn' | 'portalFall',
   revealDelay: 0,
   cameraX: 0,
   cameraY: 0,
@@ -46,7 +51,7 @@ export const NextScreen = relation({ exclusive: true });
 export const PreviousScreen = relation({ exclusive: true });
 
 // Entity traits
-export const Camera = trait({ fov: 45, near: 0.1, far: 500 });
+export const Camera = trait({ fov: 45, near: 0.1, far: 5000 });
 export const Hidden = trait();
 export const Letter = trait({ char: '', index: 0 });
 export const Package = trait({ name: '', label: '', downloads: 0, index: 0 });

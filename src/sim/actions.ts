@@ -56,7 +56,7 @@ export const actions = createActions((world) => ({
       )
     ),
 
-  createCharter: () => world.spawn(Charter, Hidden, Position({ x: 106, y: 8, z: -66 })),
+  createCharter: () => world.spawn(Charter, Hidden, Position({ z: -11 })),
 
   createPrinciplesConstellation: () => {
     const constellation = world.spawn(

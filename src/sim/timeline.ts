@@ -2,6 +2,7 @@ import { createActions, type Entity, type World } from 'koota';
 import { clamp } from 'math';
 import { easing } from 'math/time';
 import { screens, type ScreenId } from './screens.js';
+import { portalFallMotion } from './portal-fall.js';
 import {
   ActiveScreen,
   Camera,
@@ -156,7 +157,9 @@ export const timelineActions = createActions((world) => {
     },
     previous: () => {
       const screen = world.queryFirst(Timeline)?.targetFor(ActiveScreen);
-      enter(screen?.targetFor(PreviousScreen));
+      let previous = screen?.targetFor(PreviousScreen);
+      while (previous?.get(Screen)?.autoAdvance) previous = previous.targetFor(PreviousScreen);
+      enter(previous);
     },
     goTo: (target: ScreenId | Entity) => {
       const timeline = world.queryFirst(Timeline);
@@ -171,6 +174,25 @@ export const timelineActions = createActions((world) => {
     },
   };
 });
+
+/** Transition screens hand off to their destination after the visual sequence finishes. */
+export function advanceTimeline(world: World) {
+  const timeline = world.queryFirst(Timeline);
+  const screen = timeline?.targetFor(ActiveScreen);
+  const timing = timeline?.get(Timeline);
+  if (
+    screen?.get(Screen)?.autoAdvance &&
+    timing &&
+    world.get(Time)!.elapsed - timing.startedAt >= timing.duration
+  ) {
+    world.query(Camera, Position, TargetPosition).updateEach(([, position, target]) => {
+      position.x = target.x;
+      position.y = target.y;
+      position.z = target.z;
+    });
+    timelineActions(world).next();
+  }
+}
 
 export function getTransitionProgress(world: World) {
   const timing = world.queryFirst(Timeline)?.get(Timeline);
@@ -198,10 +220,16 @@ export function getCameraProgress(world: World) {
   const timing = timeline?.get(Timeline);
   if (!timeline || !timing || timing.duration <= 0) return 1;
 
-  const delay = timeline.targetFor(ActiveScreen)?.get(ScreenTransition)?.cameraDelay ?? 0;
-  if (delay <= 0) return getTransitionProgress(world);
+  const transition = timeline.targetFor(ActiveScreen)?.get(ScreenTransition);
+  const delay = transition?.cameraDelay ?? 0;
+  if (transition?.cameraEase === 'portalFall') {
+    return portalFallMotion(world.get(Time)!.elapsed - timing.startedAt, timing.duration, delay)
+      .progress;
+  }
+  if (delay <= 0 && transition?.cameraEase !== 'cubicIn') return getTransitionProgress(world);
   const elapsed = world.get(Time)!.elapsed - timing.startedAt - delay;
   const progress = clamp(elapsed / Math.max(0.001, timing.duration - delay), 0, 1);
+  if (transition?.cameraEase === 'cubicIn') return easing.cubicIn(progress);
   // A held camera builds slowly, jumps to speed like a warp drive, and glides in at the end
   return easing.expoInOut(progress);
 }

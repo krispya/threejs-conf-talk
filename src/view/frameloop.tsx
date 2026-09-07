@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
-import { systems } from '../sim/index.js';
+import { advanceTimeline, systems } from '../sim/index.js';
 
 const {
   updateTime,
@@ -20,6 +20,7 @@ export function FrameLoop() {
 
   useFrame((state, delta) => {
     updateTime(world, delta, state.elapsed);
+    advanceTimeline(world);
     moveCamera(world);
     resizePackages(world);
     updateAnchors(world);
