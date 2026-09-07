@@ -1,5 +1,6 @@
 import { Not, type World } from 'koota';
 import { random } from 'math/random';
+import { packageLabelSize } from '../../package-label.js';
 import {
   Anchor,
   ActiveScreen,
@@ -33,11 +34,12 @@ export function placePackages(world: World) {
 
   const vertical = Math.tan((camera.fov * Math.PI) / 360);
   const horizontal = vertical * (bounds.width / bounds.height);
-  const limits = (z: number, radius: number, amplitude: number) => {
+  const limits = (z: number, radius: number, amplitude: number, name: string) => {
     const distance = destination.cameraZ - z - amplitude * 0.5;
+    const halfWidth = Math.max(radius, packageLabelSize(radius, name).width / 2);
     return {
       // Labels span the front of the sphere, closer to the camera than its widest slice
-      x: Math.max(0, (distance - radius - 0.02) * horizontal - radius - amplitude - 0.1),
+      x: Math.max(0, (distance - radius - 0.04) * horizontal - halfWidth - amplitude - 0.1),
       y: Math.max(
         0,
         distance * vertical - radius * Math.sqrt(1 + vertical * vertical) - amplitude - 0.1
@@ -54,7 +56,13 @@ export function placePackages(world: World) {
     const radii = packages.map((entity) => entity.get(Size)!.radius + entity.get(Float)!.amplitude);
     let cursor = -radii.reduce((sum, radius) => sum + radius, 0) - (packages.length - 1) * 0.2;
     packages.forEach((entity, index) => {
-      const limit = limits(1.4, entity.get(Size)!.radius, entity.get(Float)!.amplitude);
+      const pkg = entity.get(Package)!;
+      const limit = limits(
+        1.4,
+        entity.get(Size)!.radius,
+        entity.get(Float)!.amplitude,
+        pkg.label || pkg.name
+      );
       const x = cursor + radii[index];
       cursor += radii[index] * 2 + 0.4;
       const anchor = {
@@ -70,9 +78,9 @@ export function placePackages(world: World) {
 
   world
     .query(Package, Size, Float, Not(Anchor), Not(Hidden))
-    .updateEach(([, size, motion], entity) => {
+    .updateEach(([pkg, size, motion], entity) => {
       const z = random.float(Math.random, 1.2, 1.5);
-      const limit = limits(z, size.radius, motion.amplitude);
+      const limit = limits(z, size.radius, motion.amplitude, pkg.label || pkg.name);
       const placed = world.query(Package, Size, Float, Anchor, Not(Hidden));
       let x = destination.cameraX;
       let y = destination.cameraY;
@@ -105,7 +113,7 @@ export function placePackages(world: World) {
 
   world
     .query(Package, Size, Anchor, Float, Not(Hidden))
-    .useStores(([, size, anchor, motion], entities) => {
+    .useStores(([pkg, size, anchor, motion], entities) => {
       for (let i = 0; i < entities.length; i++) {
         const a = entities[i].id();
         for (let j = i + 1; j < entities.length; j++) {
@@ -129,7 +137,12 @@ export function placePackages(world: World) {
 
       for (const entity of entities) {
         const id = entity.id();
-        const limit = limits(anchor.z[id], size.radius[id], motion.amplitude[id]);
+        const limit = limits(
+          anchor.z[id],
+          size.radius[id],
+          motion.amplitude[id],
+          pkg.label[id] || pkg.name[id]
+        );
         anchor.x[id] = Math.max(
           destination.cameraX - limit.x,
           Math.min(destination.cameraX + limit.x, anchor.x[id])

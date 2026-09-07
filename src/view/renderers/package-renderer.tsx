@@ -9,13 +9,13 @@ import { easing } from 'math/time';
 import { type ComponentRef, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Color } from 'three/webgpu';
 import { color } from 'three/tsl';
-import type { BufferGeometry, Group, Mesh } from 'three/webgpu';
+import type { BufferGeometry, Group, Mesh, MeshBasicNodeMaterial } from 'three/webgpu';
 import { traits } from '../../sim/index.js';
+import { packageLabelSize } from '../../package-label.js';
 import { brand, fonts, spectrum, theme } from '../../theme.js';
 import { GlassMaterial } from '../glass/glass-material.js';
 import type { GlassPhysicalNodeMaterial } from '../glass/glass-material-core.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
-import { createGradientTextMaterial } from '../gradient-text-material.js';
 import { packageSpring } from '../package-spring.js';
 import { PackageDownloads } from './package-downloads.js';
 import { PackageFeatures } from './package-features.js';
@@ -24,15 +24,7 @@ const { ActiveScreen, Hidden, Package, PackageSizing, Ref, Screen, Size, Time, T
 
 useMSDF.preload(fonts.mono);
 
-/** Rough advance of one Geist Mono glyph relative to its font size. */
-const MONO_ADVANCE = 0.62;
-
-/**
- * Labels take their color from the gradient showing through the glass, held a modest step
- * darker so they read on the highlights without turning into black stamps.
- */
-const labelMaterial = createGradientTextMaterial({ contrast: 0.34, saturation: 1.5 });
-const focusedLabelMaterial = defineTextMaterial((context) => {
+const labelMaterial = defineTextMaterial((context) => {
   const material = context.createDefaultMaterial();
   material.colorNode = color('#000000');
   return material;
@@ -57,22 +49,31 @@ export function PackageRenderer() {
   const data = useTrait(screen, Screen);
   const timing = useTrait(timeline, Timeline);
   const group = useRef<Group>(null);
-  const departure = useRef({ value: 0, from: 0, target: 0, delay: 0, duration: 0 });
-  const exitDuration = data?.codeComparisonVisible ? Math.min(0.9, timing?.duration ?? 0) : undefined;
+  const departure = useRef({ value: 0, from: 0, target: 0, delay: 0, duration: 0, visible: false });
+  const leavingDown = !!data?.codeComparisonVisible || !!data?.warpVisible;
+  const exitDuration = leavingDown
+    ? Math.min(data?.warpVisible ? 0.65 : 0.9, timing?.duration ?? 0)
+    : undefined;
 
   useLayoutEffect(() => {
     const motion = departure.current;
-    const returning = data?.packageEntry === 'rise';
+    const returning = data?.packageEntry === 'rise' && !motion.visible;
+    if (data?.packagesVisible && !motion.visible && data.packageEntry === 'scale') motion.value = 0;
+    motion.visible = data?.packagesVisible ?? false;
     if (returning && motion.value === 0) motion.value = 1;
     motion.from = motion.value;
-    motion.target = data?.codeComparisonVisible ? 1 : 0;
+    motion.target = leavingDown ? 1 : 0;
     motion.delay = returning ? data.packageDelay : 0;
-    motion.duration = returning ? data.packageDuration : Math.min(0.9, timing?.duration ?? 0);
+    motion.duration = returning
+      ? data.packageDuration
+      : (exitDuration ?? Math.min(0.9, timing?.duration ?? 0));
   }, [
-    data?.codeComparisonVisible,
+    leavingDown,
+    data?.packagesVisible,
     data?.packageEntry,
     data?.packageDelay,
     data?.packageDuration,
+    exitDuration,
     timing,
   ]);
 
@@ -147,13 +148,10 @@ function PackageView({
   const groupRef = useRef<Group>(null);
   const meshRef = useRef<Mesh<BufferGeometry, GlassPhysicalNodeMaterial>>(null);
   const labelRef = useRef<ComponentRef<typeof Text>>(null);
+  const labelGroup = useRef<Group>(null);
+  const chipMaterial = useRef<MeshBasicNodeMaterial>(null);
 
-  // Fit the label inside the blob, but never below a readable floor
-  const fontSize = Math.max(
-    0.09,
-    Math.min(radius * 0.28, (radius * 1.9) / (nameLabel.length * MONO_ADVANCE))
-  );
-  const width = Math.max(radius * 2, nameLabel.length * fontSize * MONO_ADVANCE);
+  const { fontSize, width } = packageLabelSize(radius, nameLabel);
 
   const handleInit = useCallback(
     (group: Group | null) => {
@@ -174,25 +172,27 @@ function PackageView({
   useLayoutEffect(() => {
     const screen = timeline?.targetFor(ActiveScreen)?.get(Screen);
     const names = screen?.packageNames ?? [];
+    const count = names.length || world.query(Package).length;
     const duration = timing?.duration ?? 0;
     const entering = visible && progress.current === 0;
     const returning = visible && screen?.packageEntry === 'rise';
     const delay = entering ? (screen?.packageDelay ?? 0) : 0;
     const stagger = entering
-      ? Math.min(screen?.packageStagger ?? 0, duration / Math.max(1, names.length))
+      ? Math.min(screen?.packageStagger ?? 0, duration / Math.max(1, count))
       : 0;
     transition.current = {
       from: returning ? 1 : progress.current,
       target: visible ? 1 : 0,
       startedAt: timing?.startedAt ?? world.get(Time)!.elapsed,
-      delay: delay + Math.max(0, names.indexOf(name)) * stagger,
+      delay: delay + (names.length ? Math.max(0, names.indexOf(name)) : index) * stagger,
       // The final package settles before the shared screen transition finishes.
       duration: returning
         ? 0
-        : (exitDuration ?? duration - delay - Math.max(0, names.length - 1) * stagger),
+        : (exitDuration ??
+          (screen?.packageDuration || duration - delay - Math.max(0, count - 1) * stagger)),
       spring: visible && screen?.packageLayout === 'pair',
     };
-  }, [visible, timing, timeline, world, name, exitDuration]);
+  }, [visible, timing, timeline, world, name, index, exitDuration]);
 
   // Keep the glass active until its exit finishes, and reverse from the current progress
   useFrame(
@@ -201,7 +201,7 @@ function PackageView({
       const mesh = meshRef.current;
       const label = labelRef.current;
       const { from, target, startedAt, delay, duration, spring } = transition.current;
-      if (!group || !mesh || !label) return;
+      if (!group || !mesh || !label || !labelGroup.current || !chipMaterial.current) return;
 
       const previousOpacity = clamp(progress.current, 0, 1);
       const elapsed = world.get(Time)!.elapsed - startedAt - delay;
@@ -211,8 +211,13 @@ function PackageView({
 
       const currentRadius = entity.get(Size)!.radius;
       group.scale.setScalar(Math.max(0.001, (progress.current * currentRadius) / radius));
+      // Keep labels in a readable size range while the spheres grow and shrink
+      labelGroup.current.scale.setScalar(
+        (packageLabelSize(currentRadius, nameLabel).fontSize * radius) / (fontSize * currentRadius)
+      );
       const opacity = clamp(progress.current, 0, 1);
       mesh.material.opacity = opacity;
+      chipMaterial.current.opacity = opacity;
       if (opacity !== previousOpacity) {
         label.set({ style: { fontSize, lineHeight: 1, opacity } });
       }
@@ -248,19 +253,36 @@ function PackageView({
             background={solid ? brand.green : theme.background}
           />
         </mesh>
-        {/* Label sits on the glass surface and is kept out of the refraction capture */}
-        <Text
-          ref={labelRef}
-          font={font}
-          constraints={{ width: { mode: 'exact', size: width } }}
-          layout={{ align: 'center', wrap: 'none' }}
-          material={solid ? focusedLabelMaterial : labelMaterial}
-          position={[-width / 2, fontSize / 2, radius + 0.02]}
+        <group
+          ref={labelGroup}
+          name="package-label"
+          renderOrder={1}
+          position={[0, 0, radius + 0.04]}
           userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
-          style={{ fontSize, lineHeight: 1 }}
         >
-          {nameLabel}
-        </Text>
+          <mesh renderOrder={-1}>
+            <planeGeometry args={[width, fontSize * 1.5]} />
+            <meshBasicNodeMaterial
+              ref={chipMaterial}
+              color={brand.purple}
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
+          <Text
+            ref={labelRef}
+            font={font}
+            constraints={{ width: { mode: 'exact', size: width } }}
+            layout={{ align: 'center', wrap: 'none' }}
+            material={labelMaterial}
+            position={[-width / 2, fontSize / 2, 0.01]}
+            style={{ fontSize, lineHeight: 1 }}
+          >
+            {nameLabel}
+          </Text>
+        </group>
       </group>
       <PackageDownloads
         entity={entity}
