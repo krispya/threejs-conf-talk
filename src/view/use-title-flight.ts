@@ -16,6 +16,7 @@ export function useTitleFlight() {
   const data = useTrait(screen, Screen);
   const timing = useTrait(timeline, Timeline);
   const [scrim] = useState(() => uniform(0));
+  const [speed] = useState(() => uniform(0));
   const scenery = useRef<Group>(null);
   const shakeTransform = useRef({
     position: new Vector3(),
@@ -33,40 +34,82 @@ export function useTitleFlight() {
     cruiseTime: 0,
     scrimFrom: 0,
     delay: 0,
+    warp: 0,
   });
   const cruising =
-    data?.id === 'intro' || !!data?.codeComparisonVisible || !!data?.packageFeaturesVisible;
+    data?.id === 'warp-launch' ||
+    data?.id === 'intro' ||
+    !!data?.codeComparisonVisible ||
+    !!data?.packageFeaturesVisible ||
+    !!data?.robotVisible ||
+    !!data?.warpVisible;
 
   useLayoutEffect(() => {
     const flight = motion.current;
+    if (data?.id === 'title') {
+      flight.boost = 0;
+      flight.shake = 0;
+      flight.bump = 0;
+      flight.cruiseTime = 0;
+    }
     flight.from = flight.boost;
-    flight.target = cruising ? 1 : 0;
+    flight.target = data?.warpVisible ? 4 : cruising ? 1 : 0;
+    if (data?.titleVisible) flight.warp = 0;
     flight.scrimFrom = scrim.value;
-    flight.delay = cruising && scrim.value === 0 ? (data?.packageDelay ?? 0) : 0;
-  }, [cruising, data?.packageDelay, timing, scrim]);
+    flight.delay = data?.robotVisible
+      ? 0.35
+      : cruising && scrim.value === 0
+        ? (data?.packageDelay ?? 0)
+        : 0;
+  }, [
+    cruising,
+    data?.id,
+    data?.packageDelay,
+    data?.robotVisible,
+    data?.warpVisible,
+    data?.titleVisible,
+    timing,
+    scrim,
+  ]);
 
   useFrame(
     (state, delta) => {
       const flight = motion.current;
       const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0);
-      flight.boost = lerp(flight.from, flight.target, easing.cubicInOut(clamp(elapsed / 1.2, 0, 1)));
-      flight.time += delta * (1 + flight.boost * 7);
-      const enteringPackages = cruising && data?.packageLayout === 'pair';
-      const duration = enteringPackages
-        ? data.packageDuration ||
-          Math.max(
-            0,
-            (timing?.duration ?? 0) -
-              flight.delay -
-              Math.max(0, data.packageNames.length - 1) * data.packageStagger
-          )
-        : 0.9;
+      flight.boost = lerp(
+        flight.from,
+        flight.target,
+        easing.cubicInOut(clamp(elapsed / (data?.warpVisible ? 0.9 : 1.2), 0, 1))
+      );
+      if (data?.warpVisible)
+        flight.warp = clamp(elapsed / Math.max(0.001, timing?.duration ?? 0), 0, 1);
+      flight.time += delta * (Math.min(1, flight.boost) + flight.boost * 7);
+      // TSL uniforms hold mutable render state outside React
+      // oxlint-disable-next-line react/immutability
+      speed.value = flight.boost;
+      const enteringPackages = cruising && data?.packageLayout === 'pair' && !data.robotVisible;
+      const duration = data?.robotVisible
+        ? 2.85
+        : enteringPackages
+          ? data.packageDuration ||
+            Math.max(
+              0,
+              (timing?.duration ?? 0) -
+                flight.delay -
+                Math.max(0, data.packageNames.length - 1) * data.packageStagger
+            )
+          : 0.9;
       const progress = duration <= 0 ? 1 : clamp((elapsed - flight.delay) / duration, 0, 1);
       // TSL uniforms hold mutable render state outside React
       // oxlint-disable-next-line react/immutability
       scrim.value = lerp(
         flight.scrimFrom,
-        cruising ? 1 : 0,
+        cruising &&
+          (data?.packagesVisible || data?.codeComparisonVisible) &&
+          !data?.robotVisible &&
+          !data?.warpVisible
+          ? 1
+          : 0,
         enteringPackages ? clamp(packageSpring(progress), 0, 1) : easing.cubicInOut(progress)
       );
 
@@ -75,7 +118,9 @@ export function useTitleFlight() {
       else if (!cruising && flight.boost === 0) flight.cruiseTime = 0;
       const settled = easing.cubicInOut(clamp(flight.cruiseTime / 0.9, 0, 1));
       const shake = cruising
-        ? flight.boost * lerp(0.08, 0.022, settled) * (1 + Math.sin(t * 0.85) * 0.15)
+        ? flight.boost *
+          (data?.warpVisible ? 0.05 : lerp(0.11, 0.022, settled)) *
+          (1 + Math.sin(t * 0.85) * 0.15)
         : 0;
       flight.shake = lerp(flight.shake, shake, 1 - Math.exp(-delta * 14));
       // Short impacts recoil and decay while the slower cruising rumble continues.
@@ -134,5 +179,12 @@ export function useTitleFlight() {
     { priority: -0.1 }
   );
 
-  return { motion, scrim, scenery };
+  return {
+    motion,
+    scrim,
+    speed,
+    scenery,
+    robotVisible: data?.robotVisible ?? false,
+    warpVisible: data?.warpVisible ?? false,
+  };
 }

@@ -2,24 +2,29 @@ import { useFrame, useLoader } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { useHas, useQuery, useTrait } from 'koota/react';
 import { lerp } from 'math';
+import { easing } from 'math/time';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
-import { color, float, modelViewProjection, positionLocal, smoothstep, uv, vec4 } from 'three/tsl';
 import {
-  BufferGeometry,
-  Float32BufferAttribute,
-  Vector3,
-  type Group,
-  type Mesh,
-  type Node,
-} from 'three/webgpu';
+  cameraProjectionMatrix,
+  color,
+  float,
+  modelViewMatrix,
+  positionLocal,
+  smoothstep,
+  uv,
+  vec4,
+} from 'three/tsl';
+import { BufferGeometry, Float32BufferAttribute, Vector3, type Group, type Mesh } from 'three/webgpu';
 import { Hidden, Position, Ref, Title } from '../../sim/index.js';
 import { brand, fonts } from '../../theme.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { useTitleFlight } from '../use-title-flight.js';
+import { usePortal } from '../use-portal.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { TitleTravel } from './title-travel.js';
 import { TitleObjects } from './title-objects.js';
+import { RobotReveal } from './robot-reveal.js';
 
 useLoader.preload(FontLoader, fonts.geometry);
 
@@ -33,20 +38,45 @@ function TitleView({ entity }: { entity: Entity }) {
   const { text } = useTrait(entity, Title)!;
   const visible = !useHas(entity, Hidden);
   const opacity = useTransitionOpacity(visible);
-  const { motion, scrim, scenery } = useTitleFlight();
+  const { motion, scrim, speed, scenery, robotVisible, warpVisible } = useTitleFlight();
+  const portal = usePortal();
+  const flightOpacity = useTransitionOpacity(visible && !robotVisible, {
+    duration: warpVisible || !visible ? 0.28 : undefined,
+  });
+  const objectOpacity = useTransitionOpacity(visible && !robotVisible, {
+    duration: warpVisible ? 0 : !visible ? 0.28 : undefined,
+  });
+  const letterOpacity = useTransitionOpacity(visible && !robotVisible, {
+    duration: warpVisible || !visible ? 0.28 : undefined,
+    delay: warpVisible ? 1.05 : 0,
+  });
   const scrimMesh = useRef<Mesh>(null);
   const lettering = useRef<Group>(null);
   const mark = useRef<Group>(null);
-  const approach = useRef({ visible: false, startedAt: 0 });
+  const approach = useRef({ visible: false, time: 0 });
   const horizon = useMemo(() => new Vector3(0, 0, -300), []);
   const wireMaterial = useMemo(() => {
-    const projected = modelViewProjection as Node<'vec4'>;
+    // Exponential depth growth starts at the letter faces and accelerates toward infinity
+    const extension = speed.clamp().mul(Math.log(10001)).exp().sub(1).div(10000);
+    const depth = positionLocal.z.mul(extension);
+    const projected = cameraProjectionMatrix
+      .mul(modelViewMatrix)
+      .mul(vec4(positionLocal.xy, depth, 1));
     return {
       // Preserve perspective at arbitrary depths without clipping at the scene's far plane.
       vertex: vec4(projected.xy, projected.w.mul(0.99999), projected.w),
-      opacity: positionLocal.z.negate().div(12).add(1).pow(-0.6).mul(opacity).mul(0.65),
+      opacity: depth
+        .negate()
+        .div(12)
+        .add(1)
+        .pow(-0.6)
+        .mul(letterOpacity)
+        .mul(speed.mul(8).clamp())
+        .mul(portal.outside)
+        .mul(0.65),
+      faceOpacity: letterOpacity.mul(portal.outside),
     };
-  }, [opacity]);
+  }, [letterOpacity, portal.outside, speed]);
   const lines = useMemo(
     () =>
       text.split('\n').map((line) => {
@@ -91,24 +121,26 @@ function TitleView({ entity }: { entity: Entity }) {
   );
 
   useFrame(
-    (state) => {
+    (state, delta) => {
       const root = entity.get(Ref);
       if (!root || !lettering.current || !mark.current) return;
-      if (visible && !approach.current.visible) approach.current.startedAt = state.elapsed;
+      if (visible && !approach.current.visible) approach.current.time = 0;
       approach.current.visible = visible;
       root.visible = opacity.value > 0;
-      if (scrimMesh.current) scrimMesh.current.visible = scrim.value > 0;
+      lettering.current.visible = letterOpacity.value > 0;
+      if (scrimMesh.current) scrimMesh.current.visible = scrim.value > 0 || robotVisible;
       if (!root.visible) return;
+      approach.current.time += delta * Math.min(1, motion.current.boost);
       const distance = state.viewport.getCurrentViewport(state.camera, [0, 0, -260]);
       // Approach a fixed limit so the monumental title always stays in the distance.
-      const arrival = lerp(
-        0.94,
-        1,
-        1 - Math.exp(-(state.elapsed - approach.current.startedAt) / 240)
-      );
+      const arrival = lerp(0.94, 1, 1 - Math.exp(-approach.current.time / 240));
       const size = Math.min((distance.width * 0.96) / 6.5, (distance.height * 0.75) / 2.8) * arrival;
       lettering.current.scale.setScalar(size);
-      lettering.current.position.set(-distance.width * 0.455 * arrival, -size * 0.1, horizon.z);
+      lettering.current.position.set(
+        -distance.width * 0.455 * arrival,
+        -size * 0.1,
+        horizon.z + easing.cubicIn(motion.current.warp) * 400
+      );
       const { width, height } = state.viewport.getCurrentViewport(state.camera, root.position);
       const badge = height * 0.105;
       mark.current.scale.setScalar(badge);
@@ -136,7 +168,8 @@ function TitleView({ entity }: { entity: Entity }) {
                 <shapeGeometry args={[shapes, 12]} />
                 <meshBasicNodeMaterial
                   color="#000000"
-                  opacityNode={opacity}
+                  opacityNode={wireMaterial.faceOpacity}
+                  maskNode={portal.mask}
                   transparent
                   toneMapped={false}
                 />
@@ -146,6 +179,7 @@ function TitleView({ entity }: { entity: Entity }) {
                   color="#000000"
                   vertexNode={wireMaterial.vertex}
                   opacityNode={wireMaterial.opacity}
+                  maskNode={portal.mask}
                   transparent
                   depthWrite={false}
                   toneMapped={false}
@@ -154,8 +188,15 @@ function TitleView({ entity }: { entity: Entity }) {
             </group>
           ))}
         </group>
-        <TitleTravel opacity={opacity} depth={horizon.z - 40} flight={motion} />
-        <TitleObjects opacity={opacity} depth={horizon.z - 100} flight={motion} />
+        <TitleTravel opacity={flightOpacity} depth={horizon.z - 40} flight={motion} portal={portal} />
+        <TitleObjects
+          opacity={objectOpacity}
+          depth={horizon.z - 100}
+          flight={motion}
+          restart={warpVisible}
+          portal={portal}
+        />
+        <RobotReveal />
       </group>
       <mesh
         ref={scrimMesh}

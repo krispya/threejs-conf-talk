@@ -1,6 +1,6 @@
 import { useThree } from '@react-three/fiber/webgpu';
 import { useQueryFirst, useTarget, useTrait } from 'koota/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   Fn,
   If,
@@ -26,6 +26,8 @@ import { ActiveScreen, Screen, Timeline } from '../sim/index.js';
 import { backdrop, brand } from '../theme.js';
 import { useTransitionOpacity } from './use-transition-opacity.js';
 import { bakeNebula, starfieldNode } from './starfield.js';
+import { usePortal } from './use-portal.js';
+import { usePortalRipples } from './use-portal-ripples.js';
 
 // TSL nodes are loosely typed; `any` keeps the shader readable.
 /* oxlint-disable typescript/no-explicit-any */
@@ -193,14 +195,16 @@ export function Background() {
   const shader = backdropNode;
   // The nebula bakes once and the star shader samples it for the rest of the session
   const [nebula] = useState(() => bakeNebula(renderer));
-  const [starsShader] = useState(() => starfieldNode(nebula.texture));
+  const ripples = usePortalRipples();
+  const [starsShader] = useState(() => starfieldNode(nebula.texture, ripples.uv));
   useEffect(() => () => nebula.dispose(), [nebula]);
   const timeline = useQueryFirst(Timeline);
   const screen = useTarget(timeline, ActiveScreen);
   const data = useTrait(screen, Screen);
+  const { progress: portalProgress, angle, distance, energy, edge, aperture } = usePortal();
   const solid = !data || data.background === 'solid';
   const opacity = useTransitionOpacity(data?.backgroundVisible ?? true);
-  const stars = useTransitionOpacity(data?.background === 'stars');
+  const stars = useTransitionOpacity(data?.background === 'stars', { delayed: true });
   const background = useMemo(
     () =>
       Fn(() => {
@@ -212,28 +216,60 @@ export function Background() {
           field.addAssign(shader().mul(starMix.oneMinus()));
         });
         If(stars.greaterThan(0), () => {
-          field.addAssign(starsShader().mul(starMix));
+          const sky = starsShader();
+          field.addAssign(vec4(sky.rgb.mul(ripples.light.add(1)), sky.a).mul(starMix));
         });
         return mix(vec4(color(backdrop.top), 1), field, opacity);
       })(),
-    [shader, starsShader, opacity, stars]
+    [shader, starsShader, opacity, stars, ripples]
+  );
+  const portal = useMemo(
+    () =>
+      Fn(() => {
+        const rim = mix(
+          color(brand.blue),
+          color(brand.purple),
+          angle.mul(2).add(portalProgress.mul(9)).sin().mul(0.5).add(0.5)
+        );
+        const outside = mix(
+          color(brand.green),
+          color('#18152f'),
+          glow(edge.sub(0.1), 0.2).mul(energy).mul(0.8)
+        );
+        const tunnel = angle
+          .mul(72)
+          .sub(distance.mul(24))
+          .add(portalProgress.mul(50))
+          .sin()
+          .mul(0.5)
+          .add(0.5)
+          .pow(12);
+        return vec4(
+          mix(outside, background.rgb, aperture)
+            .add(rim.mul(glow(edge, 0.09)).mul(energy).mul(tunnel.mul(0.6).add(0.7)))
+            .add(color('#f2ffff').mul(glow(edge, 0.014)).mul(energy)),
+          1
+        );
+      })(),
+    [background, portalProgress, angle, distance, energy, edge, aperture]
   );
 
   /* oxlint-disable react/immutability */
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // Switch backgrounds before the next frame updates the portal uniforms
     // Pastels get compressed by filmic tone mapping, so output the colors as authored
     const prevToneMapping = renderer.toneMapping;
     const prevBackground = scene.background;
     const prevBackgroundNode = scene.backgroundNode;
     renderer.toneMapping = NoToneMapping;
     scene.background = new Color(brand.green);
-    scene.backgroundNode = solid ? null : background;
+    scene.backgroundNode = data?.warpVisible ? portal : solid ? null : background;
     return () => {
       scene.background = prevBackground;
       scene.backgroundNode = prevBackgroundNode;
       renderer.toneMapping = prevToneMapping;
     };
-  }, [scene, renderer, background, solid]);
+  }, [scene, renderer, background, solid, data?.warpVisible, portal]);
   /* oxlint-enable react/immutability */
 
   return null;

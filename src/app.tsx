@@ -8,7 +8,7 @@ import { TimelineControls } from './view/timeline-controls.js';
 
 export function App() {
   return (
-    <Canvas>
+    <Canvas shadows>
       <Background />
       <Environment intensity={0.4} />
       <directionalLight position={[3, 4, 6]} intensity={2} />

@@ -26,6 +26,7 @@ import {
   QuadMesh,
   RenderTarget,
   type Texture,
+  type Node,
   type WebGPURenderer,
 } from 'three/webgpu';
 
@@ -165,11 +166,11 @@ export function bakeNebula(renderer: WebGPURenderer) {
 }
 
 /** Dark mineral mode from reference/glitter-pearl/glitter-pearl-shadertoy.glsl. */
-export const starfieldNode = (nebula: Texture) =>
+export const starfieldNode = (nebula: Texture, viewUV: Node<'vec2'> = screenUV) =>
   Fn(() => {
     const t: N = time;
     // A distant plane gives the sky gentle parallax during the camera pullback
-    const view = getViewPosition(screenUV, float(0.5), cameraProjectionMatrixInverse);
+    const view = getViewPosition(viewUV, float(0.5), cameraProjectionMatrixInverse);
     const direction = cameraWorldMatrix.mul(vec4(view, 0)).xyz.toVar();
     const distance = float(-400).sub(cameraPosition.z).div(direction.z);
     const point = cameraPosition.add(direction.mul(distance));
