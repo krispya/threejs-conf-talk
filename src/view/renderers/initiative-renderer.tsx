@@ -1,239 +1,324 @@
-import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
-import type { Entity } from 'koota';
-import { useHas, useQuery, useTrait } from 'koota/react';
-import { lerp } from 'math';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { color, float, mix, smoothstep, time, uniform, uv } from 'three/tsl';
+import { useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
+import { clamp } from 'math';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import {
-  AdditiveBlending,
-  SRGBColorSpace,
-  VideoTexture,
-  type Group,
-  type MeshBasicNodeMaterial,
-  type Node,
+  atan,
+  color,
+  mix,
+  positionLocal,
+  screenSize,
+  screenUV,
+  smoothstep,
+  texture,
+  uniform,
+  vec2,
+  vec4,
+} from 'three/tsl';
+import {
+  AmbientLight,
+  Box3,
+  Color,
+  DirectionalLight,
+  Group,
+  HalfFloatType,
+  Mesh,
+  MeshStandardNodeMaterial,
+  PerspectiveCamera,
+  RenderTarget,
+  Scene,
+  SphereGeometry,
+  Vector2,
+  Vector3,
 } from 'three/webgpu';
-import { Discovered, Hidden, Initiative, Position, Ref } from '../../sim/index.js';
-import { fonts } from '../../theme.js';
+import { ActiveScreen, Camera, Screen, ScreenTransition, Time, Timeline } from '../../sim/index.js';
+import { portalFallMotion } from '../../sim/portal-fall.js';
+import { brand } from '../../theme.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
+import { warmUp } from '../warm-up.js';
 
-useMSDF.preload(fonts.sans);
-
+/** A warp into a glade where an ancient stone portal will preview each initiative. */
 export function InitiativeRenderer() {
-  const initiatives = useQuery(Initiative, Position);
-  return initiatives.map((entity) => <InitiativeView key={entity} entity={entity} />);
-}
-
-function InitiativeView({ entity }: { entity: Entity }) {
-  const data = useTrait(entity, Initiative)!;
-  const visible = !useHas(entity, Hidden);
-  const discovered = useHas(entity, Discovered);
-  const [hovered, setHovered] = useState(false);
-  const [reveal] = useState(() => uniform(data.secret ? 0 : 1));
-  const opacity = useTransitionOpacity(visible, { delayed: true });
-  const font = useMSDF(fonts.sans);
-  const canvas = useThree((state) => state.gl.domElement);
-  const body = useRef<Group>(null);
-  const material = useRef<MeshBasicNodeMaterial>(null);
-  const video = useRef<HTMLVideoElement>(null);
-  const handleInit = useCallback(
-    (group: Group | null) => {
-      if (!group) return;
-      const position = entity.get(Position)!;
-      group.position.set(position.x, position.y, position.z);
-      entity.add(Ref(group));
-      return () => {
-        if (entity.isAlive()) entity.remove(Ref);
-      };
-    },
-    [entity]
-  );
-
-  const nodes = useMemo(() => {
-    const radius = uv().sub(0.5).mul(2).length();
-    const shown = reveal.mul(opacity);
-    return {
-      shown,
-      disk: float(1)
-        .sub(smoothstep(0.96, 1, radius))
-        .mul(shown),
-      glow: radius.mul(radius).mul(-6).exp().mul(opacity).mul(reveal.mul(0.18).add(0.025)),
-      surface: mix(
-        color(data.color).mul(0.16),
-        color(data.color),
-        uv()
-          .y.mul(0.6)
-          .add(time.mul(0.12).add(uv().x.mul(5)).sin().mul(0.12))
-          .clamp()
-      ),
-      signal: opacity.mul(reveal.oneMinus()).mul(time.mul(0.3).sin().mul(0.15).add(0.65)),
-    };
-  }, [data.color, opacity, reveal]);
-  const textMaterial = useMemo(
-    () =>
-      defineTextMaterial((context) => {
-        const material = context.createDefaultMaterial();
-        material.colorNode = color('#fffdfa');
-        material.opacityNode =
-          (material.opacityNode as Node<'float'> | null)?.mul(nodes.shown) ?? nodes.shown;
-        material.depthWrite = false;
-        return material;
-      }),
-    [nodes.shown]
-  );
-
-  // Keep each clip and GPU texture for the lifetime of its point of interest.
+  const [gltf, setGltf] = useState<GLTF | null>(null);
   useEffect(() => {
-    if (!data.video) return;
-    const element = document.createElement('video');
-    element.muted = true;
-    element.loop = true;
-    element.playsInline = true;
-    element.preload = 'auto';
-    element.src = data.video;
-    const texture = new VideoTexture(element);
-    texture.colorSpace = SRGBColorSpace;
-    const target = material.current;
-    const attach = () => {
-      if (!target) return;
-      const aspect = element.videoWidth / element.videoHeight;
-      texture.repeat.set(Math.min(1, 1 / aspect), Math.min(1, aspect));
-      texture.offset.set((1 - texture.repeat.x) / 2, (1 - texture.repeat.y) / 2);
-      target.map = texture;
-      target.colorNode = null;
-      target.needsUpdate = true;
-    };
-    element.addEventListener('loadeddata', attach);
-    element.load();
-    video.current = element;
+    let active = true;
+    void new GLTFLoader()
+      .loadAsync('./meshes/simple_stone_portal/scene.gltf')
+      .then((model) => {
+        if (active) setGltf(model);
+      })
+      .catch(() => {
+        // Keep the placeholder available while the destination asset is being added
+      });
     return () => {
-      element.removeEventListener('loadeddata', attach);
-      element.pause();
-      if (target) {
-        target.map = null;
-        target.colorNode = nodes.surface;
-        target.needsUpdate = true;
-      }
-      texture.dispose();
-      element.removeAttribute('src');
-      element.load();
-      video.current = null;
+      active = false;
     };
-  }, [data.video, nodes.surface]);
-
+  }, []);
+  const world = useWorld();
+  const timeline = useQueryFirst(Timeline);
+  const screen = useTarget(timeline, ActiveScreen);
+  const data = useTrait(screen, Screen);
+  const falling = !!data?.initiativePortalVisible;
+  const inside = !!data?.initiativesVisible;
+  const opacity = useTransitionOpacity(falling || inside, { duration: 0.3 });
+  const renderer = useThree((state) => state.renderer);
+  const camera = useThree((state) => state.camera);
+  const scene = useThree((state) => state.scene);
+  const size = useThree((state) => state.size);
+  const mesh = useRef<Mesh>(null);
+  const lens = useRef<{ camera: PerspectiveCamera; fov: number } | null>(null);
+  const [resources] = useState(() => {
+    const scene = new Scene();
+    scene.background = new Color('#11141d');
+    const light = new DirectionalLight('#fff4e5', 3);
+    light.position.set(-3, 4, 5);
+    const rim = new DirectionalLight('#8adfff', 2);
+    rim.position.set(3, 1, -3);
+    scene.add(new AmbientLight('#a7b7dc', 0.45), light, rim);
+    const camera = new PerspectiveCamera(45, 1, 0.1, 300);
+    camera.position.z = 7;
+    return {
+      scene,
+      camera,
+      target: new RenderTarget(1, 1, { type: HalfFloatType, samples: 4 }),
+      center: uniform(new Vector2(0.5, 0.5)),
+      radius: uniform(0),
+      glow: uniform(1),
+      phase: uniform(0),
+      burst: uniform(0),
+      spin: uniform(0),
+      clearColor: new Color(),
+      origin: new Vector3(),
+    };
+  });
+  useLayoutEffect(() => {
+    resources.target.setSize(size.width, size.height);
+    // The preview camera is independent of the presentation camera
+    // oxlint-disable-next-line react/immutability
+    resources.camera.aspect = size.width / size.height;
+    resources.camera.updateProjectionMatrix();
+  }, [resources, size.width, size.height]);
+  useEffect(() => () => resources.target.dispose(), [resources]);
+  useEffect(
+    () => () => {
+      if (lens.current) {
+        lens.current.camera.fov = lens.current.fov;
+        lens.current.camera.updateProjectionMatrix();
+      }
+    },
+    []
+  );
+  // The portal is centered and scaled to a known height so the preview camera can frame it
+  // regardless of the export's native units
+  const portal = useMemo(() => {
+    const group = new Group();
+    group.name = 'stone-portal';
+    if (!gltf) {
+      group.add(
+        new Mesh(
+          new SphereGeometry(1.25, 64, 32),
+          new MeshStandardNodeMaterial({ color: '#dba5ff', roughness: 0.3, metalness: 0.15 })
+        )
+      );
+      return group;
+    }
+    const model = gltf.scene.clone(true);
+    const bounds = new Box3().setFromObject(model);
+    const size = bounds.getSize(new Vector3());
+    const scale = 3.4 / size.y;
+    model.scale.setScalar(scale);
+    model.position.copy(bounds.getCenter(new Vector3())).multiplyScalar(-scale);
+    model.position.y -= size.y * scale * 0.05;
+    // The export's opening faces along x with the roots on the +x side, so turn that face
+    // toward the preview camera
+    group.rotation.y = -Math.PI / 2;
+    group.add(model);
+    return group;
+  }, [gltf]);
+  useLayoutEffect(() => {
+    resources.scene.add(portal);
+    return () => {
+      resources.scene.remove(portal);
+      if (!gltf) {
+        const sphere = portal.children[0] as Mesh<SphereGeometry, MeshStandardNodeMaterial>;
+        sphere.geometry.dispose();
+        sphere.material.dispose();
+      }
+    };
+  }, [resources, portal, gltf]);
+  // Build both pipelines during the title screen so the fall never stalls on a first draw
   useEffect(() => {
-    const element = video.current;
-    if (!element) return;
-    if (visible && (!data.secret || discovered)) void element.play().catch(() => {});
-    else element.pause();
-    return () => element.pause();
-  }, [visible, data.video, data.secret, discovered]);
-
-  useEffect(() => {
-    if (!hovered || !visible) return;
-    const previous = canvas.style.cursor;
-    canvas.style.setProperty('cursor', 'pointer');
-    return () => canvas.style.setProperty('cursor', previous);
-  }, [canvas, hovered, visible]);
+    warmUp(renderer, resources.scene, resources.camera, undefined, resources.target);
+    if (mesh.current) warmUp(renderer, mesh.current, camera, scene);
+  }, [renderer, camera, scene, resources, portal]);
+  const nodes = useMemo(() => {
+    const point = screenUV
+      .sub(resources.center)
+      .mul(vec2(screenSize.x.div(screenSize.y), 1))
+      .mul(2);
+    const angle = atan(point.y, point.x).sub(resources.spin);
+    const distance = point.length();
+    // Scale the warp portal's rim with its projected size as we approach PMNDRS
+    const scale = resources.radius.clamp(0.07, 1);
+    const ripple = angle
+      .mul(7)
+      .sub(resources.phase.mul(28))
+      .sin()
+      .add(angle.mul(13).add(resources.phase.mul(37)).sin().mul(0.4))
+      .mul(0.018)
+      .mul(resources.phase.mul(Math.PI).sin())
+      .add(angle.mul(3).sin().mul(resources.burst).mul(0.16))
+      .mul(scale);
+    const edge = distance.sub(resources.radius.mul(2)).sub(ripple).div(scale);
+    const mask = smoothstep(-0.035, 0.035, edge).oneMinus();
+    const halo = edge
+      .div(resources.burst.mul(0.075).add(0.09))
+      .pow(2)
+      .mul(-0.5)
+      .exp()
+      .mul(resources.glow);
+    const core = edge.div(0.014).pow(2).mul(-0.5).exp().mul(resources.glow);
+    const surround = edge.sub(0.1).div(0.2).pow(2).mul(-0.5).exp().mul(resources.glow).mul(0.8);
+    // Three curved trails make the opening's rotation readable beyond the thin rim
+    const flare = angle
+      .mul(3)
+      .add(edge.mul(6))
+      .sin()
+      .mul(0.5)
+      .add(0.5)
+      .pow(6)
+      .mul(edge.sub(0.12).div(0.32).pow(2).mul(-0.5).exp())
+      .mul(resources.burst);
+    const rim = mix(
+      color(brand.blue),
+      color(brand.purple),
+      angle.mul(2).add(resources.phase.mul(9)).sin().mul(0.5).add(0.5)
+    );
+    const tunnel = angle
+      .mul(72)
+      .sub(distance.div(scale).mul(24))
+      .add(resources.phase.mul(50))
+      .sin()
+      .mul(0.5)
+      .add(0.5)
+      .pow(12);
+    return {
+      color: mix(
+        color('#18152f'),
+        texture(
+          resources.target.texture,
+          screenUV
+            .sub(mix(resources.center, vec2(0.5), smoothstep(0.18, 0.65, resources.radius)))
+            .add(0.5)
+        ).rgb,
+        mask
+      )
+        .add(rim.mul(halo).mul(tunnel.mul(0.6).add(0.7)))
+        .add(rim.mul(flare).mul(3))
+        .add(color('#f2ffff').mul(core)),
+      opacity: mask.add(surround).add(halo).add(core).add(flare).clamp().mul(opacity),
+    };
+  }, [resources, opacity]);
 
   useFrame(
-    (_, delta) => {
-      const group = entity.get(Ref);
-      if (group) group.visible = opacity.value > 0;
-      // TSL uniforms carry mutable render state outside React
-      // oxlint-disable-next-line react/immutability
-      reveal.value = lerp(reveal.value, !data.secret || discovered ? 1 : 0, 1 - Math.exp(-delta * 5));
-      if (body.current) {
-        const scale = lerp(
-          body.current.scale.x,
-          hovered && visible ? 1.12 : 1,
-          1 - Math.exp(-delta * 7)
+    (state, delta) => {
+      if (!mesh.current) return;
+      const timeline = world.queryFirst(Timeline);
+      const screen = timeline?.targetFor(ActiveScreen);
+      const current = screen?.get(Screen);
+      const fallingNow = !!current?.initiativePortalVisible;
+      const insideNow = !!current?.initiativesVisible;
+      if (!fallingNow && lens.current) {
+        lens.current.camera.fov = lens.current.fov;
+        lens.current.camera.updateProjectionMatrix();
+        lens.current = null;
+      }
+      mesh.current.visible = fallingNow || insideNow || opacity.value > 0;
+      if (!mesh.current.visible) return;
+      const timing = timeline?.get(Timeline);
+      const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0);
+      let dolly = 7;
+      let snap = false;
+      // TSL uniforms and the preview camera carry mutable render state outside React
+      /* oxlint-disable react/immutability */
+      if (fallingNow) {
+        const motion = portalFallMotion(
+          elapsed,
+          timing!.duration,
+          screen!.get(ScreenTransition)!.cameraDelay
         );
-        body.current.scale.setScalar(scale);
+        const camera = state.camera as PerspectiveCamera;
+        lens.current ??= { camera, fov: world.queryFirst(Camera)?.get(Camera)?.fov ?? camera.fov };
+        camera.fov = lens.current.fov + motion.fov;
+        camera.rotation.z += motion.bank;
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld();
+        // The opening occupies PMNDRS's world position and grows as the camera returns
+        const distance = camera.position.z;
+        if (distance > 0) {
+          resources.origin.set(0, 0, 0).project(camera);
+          resources.center.value.set(0.5 + resources.origin.x * 0.5, 0.5 - resources.origin.y * 0.5);
+        } else {
+          resources.center.value.set(0.5, 0.5);
+        }
+        resources.radius.value =
+          distance > 0
+            ? (6.8 * motion.open * motion.radius) /
+              (Math.max(0.1, distance) * 2 * Math.tan((camera.fov * Math.PI) / 360))
+            : 3;
+        resources.glow.value = motion.open * motion.energy;
+        resources.burst.value = motion.burst;
+        resources.spin.value = motion.spin;
+        resources.phase.value = clamp(
+          (elapsed - 0.8) / Math.max(0.001, timing!.duration - 0.8),
+          0,
+          1
+        );
+        dolly = 7 + Math.max(0, distance) * 0.6;
+        snap = motion.open === 0;
+      } else if (insideNow) {
+        resources.center.value.set(0.5, 0.5);
+        resources.radius.value = 3;
+        resources.glow.value = 0;
+        resources.burst.value = 0;
+        resources.phase.value = 1;
+      }
+      // The preview camera trails its goal slightly, so the speed of the fall carries across
+      // the crossing and the glade settles to rest instead of freezing when the screen changes
+      const position = resources.camera.position;
+      position.z = snap ? dolly : position.z + (dolly - position.z) * (1 - Math.exp(-delta / 0.14));
+      /* oxlint-enable react/immutability */
+      resources.camera.updateMatrixWorld();
+      const target = renderer.getRenderTarget();
+      const autoClear = renderer.autoClear;
+      const alpha = renderer.getClearAlpha();
+      renderer.getClearColor(resources.clearColor);
+      try {
+        renderer.setRenderTarget(resources.target);
+        renderer.autoClear = true;
+        renderer.render(resources.scene, resources.camera);
+      } finally {
+        renderer.setRenderTarget(target);
+        renderer.setClearColor(resources.clearColor, alpha);
+        renderer.autoClear = autoClear;
       }
     },
     { priority: -0.6 }
   );
 
   return (
-    <group ref={handleInit} name={`initiative-${data.id}`} visible={false}>
-      <mesh position={[0, 0, -0.1]}>
-        <planeGeometry args={[28, 28]} />
-        <meshBasicNodeMaterial
-          color={data.color}
-          opacityNode={nodes.glow}
-          transparent
-          depthWrite={false}
-          toneMapped={false}
-          blending={AdditiveBlending}
-        />
-      </mesh>
-      <mesh>
-        <circleGeometry args={[0.38, 24]} />
-        <meshBasicNodeMaterial
-          color={data.color}
-          opacityNode={nodes.signal}
-          transparent
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-      <group ref={body}>
-        <mesh>
-          <planeGeometry args={[14, 14]} />
-          <meshBasicNodeMaterial
-            ref={material}
-            colorNode={nodes.surface}
-            opacityNode={nodes.disk}
-            transparent
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.05]} rotation={[0, 0, 0.35]}>
-          <ringGeometry args={[7.5, 7.56, 96, 1, 0, Math.PI * 1.78]} />
-          <meshBasicNodeMaterial
-            color={data.color}
-            opacityNode={nodes.shown}
-            transparent
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </mesh>
-      </group>
-      <TextGroup material={textMaterial} renderOrder={2}>
-        <Text
-          font={font}
-          position={[-25, -9.2, 0.2]}
-          constraints={{ width: { mode: 'exact', size: 50 } }}
-          layout={{ align: 'center', wrap: 'none' }}
-          style={{ fontSize: 2.8, lineHeight: 1 }}
-        >
-          {data.title}
-        </Text>
-      </TextGroup>
-      <mesh
-        name={`initiative-hit-${data.id}`}
-        position={[0, 0, 0.3]}
-        onPointerOver={(event) => {
-          if (!visible || opacity.value < 0.95) return;
-          event.stopPropagation();
-          setHovered(true);
-          if (data.secret) entity.add(Discovered);
-        }}
-        onPointerOut={() => setHovered(false)}
-        onClick={(event) => {
-          if (!visible || opacity.value < 0.95) return;
-          event.stopPropagation();
-          if (data.secret) entity.add(Discovered);
-          else if (data.source) window.open(data.source, '_blank', 'noopener,noreferrer');
-        }}
-      >
-        <circleGeometry args={[9, 48]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-      </mesh>
-    </group>
+    <mesh ref={mesh} name="initiative-portal" renderOrder={30} frustumCulled={false} visible={false}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicNodeMaterial
+        vertexNode={vec4(positionLocal.xy.mul(2), 0, 1)}
+        colorNode={nodes.color}
+        opacityNode={nodes.opacity}
+        transparent
+        depthWrite={false}
+        depthTest={false}
+        toneMapped={false}
+      />
+    </mesh>
   );
 }

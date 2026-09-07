@@ -1,7 +1,7 @@
-import { useFrame } from '@react-three/fiber/webgpu';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { useHas, useQuery, useQueryFirst, useTarget, useTrait } from 'koota/react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { color, dot, float, hash, mix, smoothstep, time, uv, vec2 } from 'three/tsl';
 import { AdditiveBlending, type Group, type Node } from 'three/webgpu';
 import {
@@ -17,6 +17,7 @@ import {
   Timeline,
 } from '../../sim/index.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
+import { warmUp } from '../warm-up.js';
 import { ConstellationMap } from './constellation-map.js';
 
 /** Smooth random brightness changes without an obvious repeating pulse. */
@@ -56,6 +57,14 @@ function ConstellationView({ entity }: { entity: Entity }) {
   const data = useTrait(screen, Screen);
   const mapOpacity = useTransitionOpacity(data?.constellation === id && data.constellationMap);
   const handleInit = useEntityRef(entity);
+  const renderer = useThree((state) => state.renderer);
+  const camera = useThree((state) => state.camera);
+  const scene = useThree((state) => state.scene);
+  // The stars first appear right after the black hole pops, so compile them before that beat
+  useEffect(() => {
+    const group = entity.get(Ref);
+    if (group) warmUp(renderer, group, camera, scene);
+  }, [entity, stars, renderer, camera, scene]);
 
   useFrame(
     () => {

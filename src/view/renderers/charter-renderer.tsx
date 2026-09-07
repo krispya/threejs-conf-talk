@@ -3,14 +3,23 @@ import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useHas, useQuery } from 'koota/react';
+import { useHas, useQuery, useQueryFirst, useTarget } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { color, normalView, smoothstep, uv } from 'three/tsl';
 import type { Group, Node } from 'three/webgpu';
 import { charter } from '../../data/charter.js';
-import { Charter, Hidden, Position, Ref } from '../../sim/index.js';
+import {
+  ActiveScreen,
+  Charter,
+  Hidden,
+  Position,
+  PreviousScreen,
+  Ref,
+  Screen,
+  Timeline,
+} from '../../sim/index.js';
 import { brand, fonts, ramp } from '../../theme.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { CharterDateStamp } from './charter-date-stamp.js';
@@ -29,14 +38,17 @@ function CharterView({ entity }: { entity: Entity }) {
   const sans = useMSDF(fonts.sans);
   const mono = useMSDF(fonts.mono);
   const visible = !useHas(entity, Hidden);
-  const progress = useTransitionOpacity(visible, { restartOnChange: true });
+  const timeline = useQueryFirst(Timeline);
+  const screen = useTarget(timeline, ActiveScreen);
+  const forwardExit = !!screen?.targetFor(PreviousScreen)?.get(Screen)?.charterVisible;
+  const progress = useTransitionOpacity(visible, { restartOnChange: forwardExit });
   const sheet = useRef<Group>(null);
   const upperFold = useRef<Group>(null);
   const lowerFold = useRef<Group>(null);
   const collapsing = useRef(false);
   useLayoutEffect(() => {
-    collapsing.current = !visible && progress.value > 0;
-  }, [visible, progress]);
+    collapsing.current = !visible && forwardExit && progress.value > 0;
+  }, [visible, forwardExit, progress]);
   const canvas = useThree((state) => state.renderer.domElement);
   const previousCursor = useRef<string | null>(null);
   const resetCursor = useCallback(() => {
@@ -101,7 +113,7 @@ function CharterView({ entity }: { entity: Entity }) {
   );
 
   return (
-    <group ref={handleInit} name="charter" visible={false}>
+    <group ref={handleInit} name="charter" scale={0.13} visible={false}>
       <CharterCollapse sheet={sheet} active={collapsing} progress={progress} />
       <group ref={sheet} name="charter-sheet">
         <PaperPanel opacity={opacity}>

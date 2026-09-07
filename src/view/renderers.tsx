@@ -27,8 +27,10 @@ export function Renderers() {
         <CodeComparisonRenderer />
         <ProfileRenderer />
         <ConstellationRenderer />
-        <InitiativeRenderer />
         <CharterRenderer />
+      </Suspense>
+      <Suspense fallback={null}>
+        <InitiativeRenderer />
       </Suspense>
     </>
   );

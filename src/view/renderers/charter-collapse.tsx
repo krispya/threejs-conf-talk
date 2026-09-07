@@ -40,9 +40,10 @@ import {
   type Mesh,
   type PerspectiveCamera,
 } from 'three/webgpu';
-import { Time, Timeline } from '../../sim/index.js';
+import { ActiveScreen, PreviousScreen, Screen, Time, Timeline } from '../../sim/index.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import type { useTransitionOpacity } from '../use-transition-opacity.js';
+import { warmUp } from '../warm-up.js';
 
 // TSL nodes are loosely typed; `any` keeps the shader readable.
 /* oxlint-disable typescript/no-explicit-any */
@@ -66,6 +67,8 @@ export function CharterCollapse({
 }) {
   const world = useWorld();
   const renderer = useThree((state) => state.renderer);
+  const camera = useThree((state) => state.camera);
+  const scene = useThree((state) => state.scene);
   const group = useRef<Group>(null);
   const paperMesh = useRef<Mesh>(null);
   const hole = useRef<Group>(null);
@@ -85,6 +88,7 @@ export function CharterCollapse({
       point: new Vector3(),
       edge: new Vector3(),
       previous: new Vector3(),
+      scale: new Vector3(),
     };
   });
   const [u] = useState(() => ({
@@ -110,6 +114,11 @@ export function CharterCollapse({
     captured.current = false;
     return () => resources.target.dispose();
   }, [resources]);
+  // Compile the collapse effects and the sheet capture ahead of the transition that shows them
+  useEffect(() => {
+    if (group.current) warmUp(renderer, group.current, camera, scene);
+    if (sheet.current) warmUp(renderer, sheet.current, resources.camera, undefined, resources.target);
+  }, [renderer, camera, scene, resources, sheet]);
 
   // Unshared triangles let the sheet tear. Each carries its centroid and a tear order that
   // favors the middle, so the shards nearest the hole go first.
@@ -274,14 +283,21 @@ export function CharterCollapse({
         camera.updateProjectionMatrix();
         baseFov.current = 0;
       };
-      if (!active.current) {
+      const timeline = world.queryFirst(Timeline);
+      const screen = timeline?.targetFor(ActiveScreen);
+      const exitingCharter =
+        !screen?.get(Screen)?.charterVisible &&
+        !!screen?.targetFor(PreviousScreen)?.get(Screen)?.charterVisible;
+      // Read the active screen directly so auto-advance cannot replay the collapsed sheet
+      if (!active.current || !exitingCharter) {
         captured.current = false;
         view.visible = false;
+        if (remnant.current) remnant.current.visible = false;
         u.spin.value = 0;
         settle();
         return;
       }
-      const timing = world.queryFirst(Timeline)?.get(Timeline);
+      const timing = timeline?.get(Timeline);
       const duration = timing?.duration ?? 0;
       const t = timing ? world.get(Time)!.elapsed - timing.startedAt : 0;
       view.visible = progress.value > 0 && t < duration;
@@ -297,7 +313,14 @@ export function CharterCollapse({
         paper.updateWorldMatrix(true, true);
         paper.getWorldPosition(resources.camera.position);
         paper.getWorldQuaternion(resources.camera.quaternion);
-        resources.camera.translateZ(80);
+        paper.getWorldScale(resources.scale);
+        // Frame the printed sheet at its world scale before the collapse
+        resources.camera.left = -20.2 * resources.scale.x;
+        resources.camera.right = 20.2 * resources.scale.x;
+        resources.camera.top = 15.15 * resources.scale.y;
+        resources.camera.bottom = -15.15 * resources.scale.y;
+        resources.camera.translateZ(80 * resources.scale.z);
+        resources.camera.updateProjectionMatrix();
         resources.camera.updateMatrixWorld();
 
         const target = renderer.getRenderTarget();
@@ -409,7 +432,7 @@ export function CharterCollapse({
       if (hole.current) {
         const { point, edge } = resources;
         hole.current.getWorldPosition(point);
-        edge.copy(point).add(camera.up).project(camera);
+        edge.copy(point).addScaledVector(camera.up, resources.scale.y).project(camera);
         point.project(camera);
         const perUnit = Math.abs(edge.y - point.y) * 0.5;
         u.lensCenter.value.set(point.x * 0.5 + 0.5, 0.5 - point.y * 0.5);
