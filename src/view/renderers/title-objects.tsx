@@ -63,7 +63,8 @@ export function TitleObjects({
     (state, delta) => {
       const mesh = shapes.current;
       if (!mesh) return;
-      mesh.visible = opacity.value > 0 && flight.current.target > 0 && portal.progress.value < 1;
+      const presence = Math.min(1, flight.current.boost);
+      mesh.visible = opacity.value > 0 && presence > 0 && portal.progress.value < 1;
       if (!mesh.visible) {
         if (!restart) emissionStart.current = null;
         return;
@@ -86,7 +87,7 @@ export function TitleObjects({
           rotationTime.current * object.spinZ + phase * 1.3
         );
         // Keep distant objects tiny and amplify their size as they pass the camera.
-        transform.scale.setScalar(age < 0 ? 0 : object.size * lerp(1, 18, travel ** 3));
+        transform.scale.setScalar(age < 0 ? 0 : object.size * lerp(1, 18, travel ** 3) * presence);
         transform.matrix.makeRotationFromEuler(transform.rotation).scale(transform.scale);
         transform.matrix.setPosition(
           (Math.cos(object.angle) * object.radius * width) / 2 + Math.sin(drift + phase) * 0.8,

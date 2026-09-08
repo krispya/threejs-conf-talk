@@ -29,3 +29,24 @@ body,
   place-items: center;
   height: 100%;
 }
+
+.brand-mark {
+  position: fixed;
+  left: 4.5%;
+  bottom: 0;
+  width: 10.5vh;
+  height: 10.5vh;
+  z-index: 1;
+  display: block;
+  pointer-events: none;
+  transform: translateY(0);
+  transition: transform 0.55s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.brand-mark[data-hidden='true'] {
+  transform: translateY(100%);
+}
+
+.brand-mark[data-warp='true'] {
+  transition-delay: 1.15s;
+}

@@ -5,23 +5,33 @@ import { lerp } from 'math';
 import { easing } from 'math/time';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import {
+  attribute,
+  cameraNear,
   cameraProjectionMatrix,
   color,
   float,
+  Fn,
+  If,
+  mix,
   modelViewMatrix,
+  positionGeometry,
   positionLocal,
+  screenDPR,
   smoothstep,
   uv,
+  varying,
+  vec2,
   vec4,
+  viewport,
 } from 'three/tsl';
-import { BufferGeometry, Float32BufferAttribute, Vector3, type Group, type Mesh } from 'three/webgpu';
+import { Vector3, type Group, type Mesh } from 'three/webgpu';
 import { Hidden, Position, Ref, Title } from '../../sim/index.js';
 import { brand, fonts } from '../../theme.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { useTitleFlight } from '../use-title-flight.js';
 import { usePortal } from '../use-portal.js';
-import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { TitleTravel } from './title-travel.js';
 import { TitleObjects } from './title-objects.js';
 import { RobotReveal } from './robot-reveal.js';
@@ -52,19 +62,44 @@ function TitleView({ entity }: { entity: Entity }) {
   });
   const scrimMesh = useRef<Mesh>(null);
   const lettering = useRef<Group>(null);
-  const mark = useRef<Group>(null);
   const approach = useRef({ visible: false, time: 0 });
   const horizon = useMemo(() => new Vector3(0, 0, -300), []);
   const wireMaterial = useMemo(() => {
     // Exponential depth growth starts at the letter faces and accelerates toward infinity
     const extension = speed.clamp().mul(Math.log(10001)).exp().sub(1).div(10000);
-    const depth = positionLocal.z.mul(extension);
-    const projected = cameraProjectionMatrix
-      .mul(modelViewMatrix)
-      .mul(vec4(positionLocal.xy, depth, 1));
+    const start = attribute<'vec3'>('instanceStart', 'vec3');
+    const end = attribute<'vec3'>('instanceEnd', 'vec3');
+    const depth = varying(mix(start.z, end.z, positionGeometry.y.clamp()).mul(extension));
+    const vertex = Fn(() => {
+      const a = modelViewMatrix.mul(vec4(start.xy, start.z.mul(extension), 1)).toVar();
+      const b = modelViewMatrix.mul(vec4(end.xy, end.z.mul(extension), 1)).toVar();
+      const near = cameraNear.negate();
+      const hidden = a.z.greaterThan(near).and(b.z.greaterThan(near)).toVar();
+      // Trim crossings before dividing by depth as the title passes the camera.
+      If(a.z.greaterThan(near).and(b.z.lessThanEqual(near)), () => {
+        a.assign(mix(a, b, near.sub(a.z).div(b.z.sub(a.z))));
+      });
+      If(b.z.greaterThan(near).and(a.z.lessThanEqual(near)), () => {
+        b.assign(mix(b, a, near.sub(b.z).div(a.z.sub(b.z))));
+      });
+      const clipStart = cameraProjectionMatrix.mul(a);
+      const clipEnd = cameraProjectionMatrix.mul(b);
+      const direction = clipEnd.xy
+        .div(clipEnd.w.max(cameraNear))
+        .sub(clipStart.xy.div(clipStart.w.max(cameraNear)))
+        .mul(viewport.zw);
+      // Collapsed rails have no screen direction until the extrusion begins.
+      const normal = vec2(direction.y, direction.x.negate()).div(direction.length().max(0.000001));
+      const projected = mix(clipStart, clipEnd, positionGeometry.y.clamp());
+      const offset = normal.mul(positionGeometry.x).mul(1.5).mul(screenDPR).div(viewport.zw);
+      // Preserve perspective at arbitrary depths without clipping at the far plane.
+      return hidden.select(
+        vec4(0, 0, 0, -1),
+        vec4(projected.xy.add(offset.mul(projected.w)), projected.w.mul(0.99999), projected.w)
+      );
+    })();
     return {
-      // Preserve perspective at arbitrary depths without clipping at the scene's far plane.
-      vertex: vec4(projected.xy, projected.w.mul(0.99999), projected.w),
+      vertex,
       opacity: depth
         .negate()
         .div(12)
@@ -100,8 +135,7 @@ function TitleView({ entity }: { entity: Entity }) {
             }
           }
         }
-        const wire = new BufferGeometry();
-        wire.setAttribute('position', new Float32BufferAttribute(vertices, 3));
+        const wire = new LineSegmentsGeometry().setPositions(vertices);
         return { shapes, wire };
       }),
     [font, text]
@@ -123,7 +157,7 @@ function TitleView({ entity }: { entity: Entity }) {
   useFrame(
     (state, delta) => {
       const root = entity.get(Ref);
-      if (!root || !lettering.current || !mark.current) return;
+      if (!root || !lettering.current) return;
       if (visible && !approach.current.visible) approach.current.time = 0;
       approach.current.visible = visible;
       root.visible = opacity.value > 0;
@@ -141,19 +175,6 @@ function TitleView({ entity }: { entity: Entity }) {
         -size * 0.1,
         horizon.z + easing.cubicIn(motion.current.warp) * 400
       );
-      const { width, height } = state.viewport.getCurrentViewport(state.camera, root.position);
-      const badge = height * 0.105;
-      mark.current.scale.setScalar(badge);
-      mark.current.quaternion.copy(state.camera.quaternion);
-      mark.current.position
-        .set(
-          -width * 0.455 + badge / 2,
-          -height / 2 + badge / 2,
-          root.position.z - state.camera.position.z
-        )
-        .applyQuaternion(state.camera.quaternion)
-        .add(state.camera.position)
-        .sub(root.position);
     },
     { priority: -0.6 }
   );
@@ -174,8 +195,8 @@ function TitleView({ entity }: { entity: Entity }) {
                   toneMapped={false}
                 />
               </mesh>
-              <lineSegments geometry={wire} frustumCulled={false} renderOrder={-10}>
-                <lineBasicNodeMaterial
+              <mesh geometry={wire} frustumCulled={false} renderOrder={-10}>
+                <meshBasicNodeMaterial
                   color="#000000"
                   vertexNode={wireMaterial.vertex}
                   opacityNode={wireMaterial.opacity}
@@ -184,7 +205,7 @@ function TitleView({ entity }: { entity: Entity }) {
                   depthWrite={false}
                   toneMapped={false}
                 />
-              </lineSegments>
+              </mesh>
             </group>
           ))}
         </group>
@@ -220,63 +241,6 @@ function TitleView({ entity }: { entity: Entity }) {
           toneMapped={false}
         />
       </mesh>
-      <group
-        ref={mark}
-        name="brand-mark"
-        renderOrder={100}
-        userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
-      >
-        <mesh renderOrder={100}>
-          <planeGeometry args={[1, 1]} />
-          <meshBasicNodeMaterial
-            color="#000000"
-            opacityNode={opacity}
-            transparent
-            depthTest={false}
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </mesh>
-        <mesh position={[0.05, 0, 0.01]} renderOrder={101}>
-          <planeGeometry args={[0.27, 0.41]} />
-          <meshBasicNodeMaterial
-            color="#ffffff"
-            opacityNode={opacity}
-            transparent
-            depthTest={false}
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </mesh>
-        <mesh position={[-0.075, -0.065, 0.02]} renderOrder={102}>
-          <planeGeometry args={[0.31, 0.3]} />
-          <meshBasicNodeMaterial
-            color="#000000"
-            opacityNode={opacity}
-            transparent
-            depthTest={false}
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </mesh>
-        {[
-          [-0.15, 0],
-          [0, 0],
-          [0, -0.15],
-        ].map(([x, y], index) => (
-          <mesh key={index} position={[x, y, 0.03]} renderOrder={103}>
-            <planeGeometry args={[0.125, 0.125]} />
-            <meshBasicNodeMaterial
-              color="#ffffff"
-              opacityNode={opacity}
-              transparent
-              depthTest={false}
-              depthWrite={false}
-              toneMapped={false}
-            />
-          </mesh>
-        ))}
-      </group>
     </group>
   );
 }

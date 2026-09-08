@@ -394,7 +394,7 @@ void test('flies through the letters to contributors and returns without recreat
   assert.equal(letter.has(sim.Hidden), false);
   advance(world, contributors.get(sim.ScreenTransition).duration);
   world.set(sim.Bounds, { width: 16, height: 9 });
-  sim.systems.placeProfiles(world);
+  sim.systems.placeProfiles(world, sim.systems.createProfileLayout(world.query(sim.Profile).length));
   sim.systems.floatBodies(world);
   assert.equal(camera.get(sim.Position).z, -5);
   assert(camera.get(sim.Position).z < letter.get(sim.Position).z);
@@ -467,7 +467,7 @@ void test('profiles resume their floating motion after leaving the sphere previe
   world.set(sim.Bounds, { width: 16, height: 9 });
   for (const entity of [letter, ...profiles]) entity.set(sim.Float, { phase: 1, speed: 0.4 });
   sim.systems.updateAnchors(world);
-  sim.systems.placeProfiles(world);
+  sim.systems.placeProfiles(world, sim.systems.createProfileLayout(world.query(sim.Profile).length));
 
   const motionOnScreen = (entity) => {
     const view = new PerspectiveCamera(camera.get(sim.Camera).fov, 16 / 9, 0.1, 500);
@@ -571,7 +571,7 @@ void test('travels from the sphere preview to principles and returns smoothly', 
 
   world.set(sim.Bounds, { width: 16, height: 9 });
   sim.systems.updateAnchors(world);
-  sim.systems.placeProfiles(world);
+  sim.systems.placeProfiles(world, sim.systems.createProfileLayout(world.query(sim.Profile).length));
   sim.systems.floatBodies(world);
   const view = new PerspectiveCamera(camera.get(sim.Camera).fov, 16 / 9, 0.1, 500);
   view.position.copy(camera.get(sim.Position));
@@ -739,7 +739,7 @@ void test('floating portraits stay in separate depth layers up close and in spac
     .forEach((profile, index) => createProfile(profile.login, profile.avatar, index + 1));
   world.set(sim.Bounds, { width: 16, height: 9 });
   timeline.goTo('profiles');
-  sim.systems.placeProfiles(world);
+  sim.systems.placeProfiles(world, sim.systems.createProfileLayout(world.query(sim.Profile).length));
 
   for (const screen of ['profiles', 'constellation']) {
     timeline.goTo(screen);

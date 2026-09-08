@@ -46,12 +46,6 @@ export function useTitleFlight() {
 
   useLayoutEffect(() => {
     const flight = motion.current;
-    if (data?.id === 'title') {
-      flight.boost = 0;
-      flight.shake = 0;
-      flight.bump = 0;
-      flight.cruiseTime = 0;
-    }
     flight.from = flight.boost;
     flight.target = data?.warpVisible ? 4 : cruising ? 1 : 0;
     if (data?.titleVisible) flight.warp = 0;
