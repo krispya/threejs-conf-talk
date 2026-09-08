@@ -26,11 +26,12 @@ import {
   vec4,
   viewport,
 } from 'three/tsl';
-import { Vector3, type Group, type Mesh } from 'three/webgpu';
+import { ShapeGeometry, Vector3, type Group, type Mesh } from 'three/webgpu';
 import { Hidden, Position, Ref, Title } from '../../sim/index.js';
 import { brand, fonts } from '../../theme.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { useTitleFlight } from '../use-title-flight.js';
+import { useTitleGlitch } from '../use-title-glitch.js';
 import { usePortal } from '../use-portal.js';
 import { TitleTravel } from './title-travel.js';
 import { TitleObjects } from './title-objects.js';
@@ -50,6 +51,7 @@ function TitleView({ entity }: { entity: Entity }) {
   const opacity = useTransitionOpacity(visible);
   const { motion, scrim, speed, scenery, robotVisible, warpVisible } = useTitleFlight();
   const portal = usePortal();
+  const glitch = useTitleGlitch();
   const flightOpacity = useTransitionOpacity(visible && !robotVisible, {
     duration: warpVisible || !visible ? 0.28 : undefined,
   });
@@ -136,11 +138,18 @@ function TitleView({ entity }: { entity: Entity }) {
           }
         }
         const wire = new LineSegmentsGeometry().setPositions(vertices);
-        return { shapes, wire };
+        return { face: new ShapeGeometry(shapes, 12), wire };
       }),
     [font, text]
   );
-  useEffect(() => () => lines.forEach(({ wire }) => wire.dispose()), [lines]);
+  useEffect(
+    () => () =>
+      lines.forEach(({ face, wire }) => {
+        face.dispose();
+        wire.dispose();
+      }),
+    [lines]
+  );
   const handleInit = useCallback(
     (group: Group | null) => {
       if (!group) return;
@@ -183,15 +192,47 @@ function TitleView({ entity }: { entity: Entity }) {
     <group ref={handleInit} name="talk-title" visible={false}>
       <group ref={scenery} name="flight-scenery" matrixAutoUpdate={false}>
         <group ref={lettering} name="distant-title" rotation={[0, -0.008, 0]}>
-          {lines.map(({ shapes, wire }, index) => (
+          {lines.map(({ face, wire }, index) => (
             <group key={index} name={`title-line-${index}`} position={[0, 1 - index * 1.03, 0]}>
-              <mesh position={[0, 0, 0.002]} renderOrder={-10}>
-                <shapeGeometry args={[shapes, 12]} />
+              <mesh geometry={face} position={[0, 0, 0.002]} renderOrder={-10}>
                 <meshBasicNodeMaterial
                   color="#000000"
                   opacityNode={wireMaterial.faceOpacity}
-                  maskNode={portal.mask}
+                  maskNode={portal.mask.and(glitch.mask.not())}
                   transparent
+                  toneMapped={false}
+                />
+              </mesh>
+              <mesh geometry={face} position={[0, 0, 0.002]} renderOrder={-10}>
+                <meshBasicNodeMaterial
+                  color={brand.red}
+                  vertexNode={glitch.echoVertex}
+                  opacityNode={wireMaterial.faceOpacity.mul(0.5)}
+                  maskNode={portal.mask.and(glitch.mask)}
+                  transparent
+                  depthWrite={false}
+                  toneMapped={false}
+                />
+              </mesh>
+              <mesh geometry={face} position={[0, 0, 0.002]} renderOrder={-10}>
+                <meshBasicNodeMaterial
+                  color={brand.blue}
+                  vertexNode={glitch.cyanVertex}
+                  opacityNode={wireMaterial.faceOpacity.mul(0.5)}
+                  maskNode={portal.mask.and(glitch.mask)}
+                  transparent
+                  depthWrite={false}
+                  toneMapped={false}
+                />
+              </mesh>
+              <mesh geometry={face} position={[0, 0, 0.002]} renderOrder={-10}>
+                <meshBasicNodeMaterial
+                  color="#000000"
+                  vertexNode={glitch.vertex}
+                  opacityNode={wireMaterial.faceOpacity.mul(glitch.signal)}
+                  maskNode={portal.mask.and(glitch.mask)}
+                  transparent
+                  depthWrite={false}
                   toneMapped={false}
                 />
               </mesh>
