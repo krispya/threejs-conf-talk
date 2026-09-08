@@ -46,7 +46,8 @@ function createScene(t) {
   const robot = threeFeatures.targetFor(sim.NextScreen);
   const warp = robot.targetFor(sim.NextScreen);
   const packageOverview = warp.targetFor(sim.NextScreen);
-  const packageSizes = packageOverview.targetFor(sim.NextScreen);
+  const packageMaintainers = packageOverview.targetFor(sim.NextScreen);
+  const packageSizes = packageMaintainers.targetFor(sim.NextScreen);
   const letters = packageSizes.targetFor(sim.NextScreen);
   const contributors = letters.targetFor(sim.NextScreen);
   const charterScreen = contributors.targetFor(sim.NextScreen);
@@ -74,6 +75,7 @@ function createScene(t) {
     robot,
     warp,
     packageOverview,
+    packageMaintainers,
     packageSizes,
     letters,
     contributors,
@@ -114,12 +116,13 @@ void test('holds at warp until advancing to counts, code, Three features, and th
     robot,
     warp,
     packageOverview,
+    packageMaintainers,
     packageSizes,
     letters,
   } = createScene(t);
   const featured = [
-    sim.actions(world).createPackage('react-three-fiber', 5_129_998, 1, 1.1, 0.86, 'R3F'),
-    sim.actions(world).createPackage('three', 15_193_062, 2, 1.2, 1.48, 'Three'),
+    sim.actions(world).createPackage('@react-three/fiber', 5_129_998, 1, 1.1, 0.86),
+    sim.actions(world).createPackage('three', 15_193_062, 2, 1.2, 1.48),
   ];
   for (const entity of featured) entity.add(sim.Hidden);
   const allPackages = [...packages, ...featured];
@@ -209,7 +212,21 @@ void test('holds at warp until advancing to counts, code, Three features, and th
     )
   );
   timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageMaintainers);
+  assert.equal(packageMaintainers.get(sim.Screen).id, 'package-maintainers');
+  assert.equal(packageMaintainers.get(sim.Screen).packageMaintainersVisible, true);
+  assert.equal(packageMaintainers.get(sim.Screen).profilesVisible, false);
+  assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(pmndrsPackages));
+  advance(world, packageMaintainers.get(sim.ScreenTransition).duration);
+  assert.equal(camera.get(sim.Position).z, 12);
+  assert.equal(packages[0].get(sim.Size).radius, packages[0].get(sim.PackageSizing).compressed);
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageOverview);
+  assert.equal(packageOverview.get(sim.Screen).packageMaintainersVisible, false);
+  timeline.next();
+  timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageSizes);
+  assert.equal(packageSizes.get(sim.Screen).packageMaintainersVisible, false);
   const beforeGrowth = packages[0].get(sim.Size).radius;
   advance(world, packageSizes.get(sim.ScreenTransition).duration / 2);
   assert(packages[0].get(sim.Size).radius > beforeGrowth);
@@ -236,6 +253,9 @@ void test('holds at warp until advancing to counts, code, Three features, and th
   advance(world, packageSizes.get(sim.ScreenTransition).duration);
   assert.equal(camera.get(sim.Position).z, 12);
   assert.deepEqual([...world.query(sim.Letter)], [letter]);
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageMaintainers);
+  assert.equal(packageMaintainers.get(sim.Screen).packageMaintainersVisible, true);
   timeline.previous();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), packageOverview);
   assert.deepEqual(new Set(world.query(sim.Package, Not(sim.Hidden))), new Set(pmndrsPackages));
@@ -342,7 +362,7 @@ void test('resizes packages from compressed to proportional sizes and reverses w
   const runnerUp = sim
     .actions(world)
     .createPackage(
-      'use-gesture',
+      '@use-gesture/react',
       6_814_965,
       1,
       sim.compressedRadiusForDownloads(6_814_965, 13_025, 54_493_939),

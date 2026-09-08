@@ -19,6 +19,7 @@ export const Screen = trait({
   packageEntry: 'scale' as 'scale' | 'rise',
   packageDownloadsVisible: false,
   packageFeaturesVisible: false,
+  packageMaintainersVisible: false,
   codeComparisonVisible: false,
   robotVisible: false,
   warpVisible: false,

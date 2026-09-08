@@ -19,6 +19,7 @@ import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { packageSpring } from '../package-spring.js';
 import { PackageDownloads } from './package-downloads.js';
 import { PackageFeatures } from './package-features.js';
+import { PackageMaintainers } from './package-maintainer-renderer.js';
 
 const { ActiveScreen, Hidden, Package, PackageSizing, Ref, Screen, Size, Time, Timeline } = traits;
 
@@ -27,6 +28,7 @@ useMSDF.preload(fonts.mono);
 const labelMaterial = defineTextMaterial((context) => {
   const material = context.createDefaultMaterial();
   material.colorNode = color('#000000');
+  material.depthTest = true;
   return material;
 });
 
@@ -105,6 +107,7 @@ export function PackageRenderer() {
             solid={data?.background === 'solid'}
             showDownloads={data?.packageDownloadsVisible ?? false}
             showFeatures={data?.packageFeaturesVisible ?? false}
+            showMaintainers={data?.packageMaintainersVisible ?? false}
             exitDuration={exitDuration}
           />
         ))}
@@ -119,6 +122,7 @@ function PackageView({
   solid,
   showDownloads,
   showFeatures,
+  showMaintainers,
   exitDuration,
 }: {
   entity: Entity;
@@ -126,6 +130,7 @@ function PackageView({
   solid: boolean;
   showDownloads: boolean;
   showFeatures: boolean;
+  showMaintainers: boolean;
   exitDuration: number | undefined;
 }) {
   const world = useWorld();
@@ -267,7 +272,8 @@ function PackageView({
               color={brand.purple}
               transparent
               opacity={0}
-              depthWrite={false}
+              alphaTest={0.001}
+              depthWrite
               toneMapped={false}
             />
           </mesh>
@@ -282,6 +288,12 @@ function PackageView({
           >
             {nameLabel}
           </Text>
+          <PackageMaintainers
+            entity={entity}
+            visible={showMaintainers && visible}
+            width={width}
+            height={fontSize * 1.5}
+          />
         </group>
       </group>
       <PackageDownloads

@@ -19,4 +19,13 @@ export const profiles = [
   { login: 'thejustinwalsh', avatar: './profiles/thejustinwalsh.png' },
   { login: 'DennisSmolek', avatar: './profiles/DennisSmolek.jpg' },
   { login: 'kvvasuu', avatar: './profiles/kvvasuu.jpg' },
+  { login: 'wiledal', avatar: './profiles/wiledal.jpg' },
 ] as const;
+
+/** Profiles available for package credits, including projects outside pmndrs. */
+export const allProfiles = [
+  ...profiles,
+  { login: 'mrdoob', avatar: './profiles/mrdoob.jpg' },
+] as const;
+
+export type ProfileLogin = (typeof allProfiles)[number]['login'];
