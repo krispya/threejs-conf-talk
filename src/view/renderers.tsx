@@ -8,6 +8,7 @@ import { LetterRenderer } from './renderers/letter-renderer.js';
 import { InitiativeRenderer } from './renderers/initiative-renderer.js';
 import { PackageRenderer } from './renderers/package-renderer.js';
 import { ProfileRenderer } from './renderers/profile-renderer.js';
+import { GreetingLayer } from './greeting-layer.js';
 import { TitleRenderer } from './renderers/title-renderer.js';
 
 export function Renderers() {
@@ -29,6 +30,7 @@ export function Renderers() {
         <ConstellationRenderer />
         <CharterRenderer />
       </Suspense>
+      <GreetingLayer />
       <Suspense fallback={null}>
         <InitiativeRenderer />
       </Suspense>

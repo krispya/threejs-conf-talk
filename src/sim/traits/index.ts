@@ -26,6 +26,9 @@ export const Screen = trait({
   autoAdvance: false,
   packageSizing: 'compressed' as 'compressed' | 'proportional',
   profilesVisible: false,
+  focusedProfile: '',
+  surroundingProfiles: () => [] as readonly string[],
+  greetingVisible: false,
   backgroundVisible: true,
   background: 'pastel' as 'solid' | 'pastel' | 'stars',
   constellation: '',
@@ -58,6 +61,7 @@ export const Letter = trait({ char: '', index: 0 });
 export const Package = trait({ name: '', label: '', downloads: 0, index: 0 });
 export const PackageSizing = trait({ compressed: 1, proportional: 1 });
 export const Profile = trait({ login: '', avatar: '', index: 0 });
+export const ProfileFocus = trait({ value: 0, from: 0, to: 0, slot: -1, count: 0, scale: 1 });
 export const Charter = trait();
 export const Title = trait({ text: '' });
 export const Initiative = trait({

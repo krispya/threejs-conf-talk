@@ -50,7 +50,10 @@ function createScene(t) {
   const packageSizes = packageMaintainers.targetFor(sim.NextScreen);
   const letters = packageSizes.targetFor(sim.NextScreen);
   const contributors = letters.targetFor(sim.NextScreen);
-  const charterScreen = contributors.targetFor(sim.NextScreen);
+  const greeting = contributors.targetFor(sim.NextScreen);
+  const paul = greeting.targetFor(sim.NextScreen);
+  const paulCommunity = paul.targetFor(sim.NextScreen);
+  const charterScreen = paulCommunity.targetFor(sim.NextScreen);
   const initiativesScreen = charterScreen.targetFor(sim.NextScreen);
   const constellation = initiativesScreen.targetFor(sim.NextScreen);
   const principlesScreen = world
@@ -79,6 +82,9 @@ function createScene(t) {
     packageSizes,
     letters,
     contributors,
+    greeting,
+    paul,
+    paulCommunity,
     constellation,
     principlesConstellation,
     principlesScreen,
@@ -322,6 +328,9 @@ void test('navigation stops at the ends and supports named screens', (t) => {
     intro,
     letters,
     contributors,
+    greeting,
+    paul,
+    paulCommunity,
     constellation,
     principlesScreen,
     charterScreen,
@@ -332,6 +341,12 @@ void test('navigation stops at the ends and supports named screens', (t) => {
   timeline.goTo('letters');
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), contributors);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), greeting);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), paul);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), paulCommunity);
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), charterScreen);
   timeline.next();
@@ -617,13 +632,140 @@ void test('travels from the sphere preview to principles and returns smoothly', 
   assert(stars.every((star) => !star.isAlive()));
 });
 
+void test('introduces Poimandres after the profiles and waits before the story', (t) => {
+  const { world, camera, charter, profiles, timeline, timelineEntity, greeting, contributors } =
+    createScene(t);
+  timeline.goTo('profiles');
+  advance(world, contributors.get(sim.ScreenTransition).duration);
+  const position = { ...camera.get(sim.Position) };
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), greeting);
+  assert.equal(greeting.get(sim.Screen).id, 'hello');
+  assert.equal(greeting.get(sim.Screen).greetingVisible, true);
+  assert.equal(greeting.get(sim.Screen).background, 'pastel');
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
+  assert(charter.has(sim.Hidden));
+  advance(world, 10);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), greeting);
+  assert.deepEqual(camera.get(sim.Position), position);
+
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), contributors);
+  assert.equal(contributors.get(sim.Screen).greetingVisible, false);
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), greeting);
+});
+
+void test('starts focusing Paul immediately and restores the portraits on return', (t) => {
+  const { world, camera, charter, profiles, timeline, timelineEntity, paul, greeting } =
+    createScene(t);
+  const other = sim.actions(world).createProfile('dai-shi', './profiles/dai-shi.png', 1);
+  const portrait = profiles[0];
+  portrait.set(sim.Anchor, { x: 2, y: -1 });
+  const radius = portrait.get(sim.Size).radius;
+  timeline.goTo('hello');
+  advance(world, 2.3);
+  sim.systems.floatBodies(world);
+
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), paul);
+  assert.equal(paul.get(sim.Screen).greetingVisible, false);
+  assert.equal(paul.get(sim.Screen).focusedProfile, 'drcmda');
+  assert(charter.has(sim.Hidden));
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], [portrait]);
+  assert(other.isAlive());
+
+  advance(world, 0.1);
+  sim.systems.floatBodies(world);
+  const floating = { ...portrait.get(sim.Position) };
+  sim.systems.focusProfiles(world);
+  assert(sim.getRevealProgress(world) > 0);
+  assert(Math.abs(portrait.get(sim.Position).x) < Math.abs(floating.x));
+  assert(Math.abs(portrait.get(sim.Position).y) < Math.abs(floating.y));
+
+  advance(world, 2.5);
+  sim.systems.floatBodies(world);
+  sim.systems.focusProfiles(world);
+  const centered = { ...portrait.get(sim.Position) };
+  assert.equal(centered.x, camera.get(sim.Position).x);
+  assert.equal(centered.y, camera.get(sim.Position).y);
+  assert.equal(portrait.get(sim.Size).radius, radius);
+
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), greeting);
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], [portrait, other]);
+  sim.systems.floatBodies(world);
+  sim.systems.focusProfiles(world);
+  assert.deepEqual(portrait.get(sim.Position), centered);
+  advance(world, 2.3);
+  sim.systems.floatBodies(world);
+  const restored = { ...portrait.get(sim.Position) };
+  sim.systems.focusProfiles(world);
+  assert.deepEqual(portrait.get(sim.Position), restored);
+  assert.equal(portrait.get(sim.ProfileFocus).value, 0);
+});
+
+void test('surrounds Paul with five hovering profiles and returns to his solo screen', (t) => {
+  const { world, camera, profiles, timeline, paul, paulCommunity } = createScene(t);
+  const companions = paulCommunity
+    .get(sim.Screen)
+    .surroundingProfiles.map((login, index) =>
+      sim.actions(world).createProfile(login, `./profiles/${login}.png`, index + 1)
+    );
+  const unrelated = sim.actions(world).createProfile('other', './profiles/other.png', 6);
+  timeline.goTo('paul');
+  advance(world, paul.get(sim.ScreenTransition).duration);
+  sim.systems.floatBodies(world);
+  sim.systems.focusProfiles(world);
+  timeline.next();
+  assert.deepEqual(
+    new Set(world.query(sim.Profile, Not(sim.Hidden))),
+    new Set([...profiles, ...companions])
+  );
+  assert(unrelated.has(sim.Hidden));
+  assert.equal(paulCommunity.get(sim.Screen).greetingVisible, false);
+  advance(world, paulCommunity.get(sim.ScreenTransition).duration);
+  sim.systems.floatBodies(world);
+  sim.systems.focusProfiles(world);
+  const center = profiles[0].get(sim.Position);
+  assert.equal(center.x, camera.get(sim.Position).x);
+  assert.equal(center.y, camera.get(sim.Position).y);
+  const positions = companions.map((profile) => ({ ...profile.get(sim.Position) }));
+  assert(positions.some((position) => position.x < center.x));
+  assert(positions.some((position) => position.x > center.x));
+  assert(positions.some((position) => position.y < center.y));
+  assert(positions.some((position) => position.y > center.y));
+  assert(positions.every((position) => Math.hypot(position.x - center.x, position.y - center.y) > 1));
+  advance(world, 1);
+  sim.systems.floatBodies(world);
+  sim.systems.focusProfiles(world);
+  assert(companions.every((profile, index) => profile.get(sim.Position).y !== positions[index].y));
+  const apparentRadii = companions.map(
+    (profile) =>
+      (profile.get(sim.Size).radius * profile.get(sim.ProfileFocus).scale) /
+      (camera.get(sim.Position).z - profile.get(sim.Position).z)
+  );
+  assert(Math.max(...apparentRadii) - Math.min(...apparentRadii) < 1e-9);
+  assert.equal(profiles[0].get(sim.ProfileFocus).scale, 1);
+  assert.equal(profiles[0].get(sim.Position).x, center.x);
+  assert.equal(profiles[0].get(sim.Position).y, center.y);
+  timeline.previous();
+  assert.deepEqual([...world.query(sim.Profile, Not(sim.Hidden))], profiles);
+  timeline.goTo('profiles');
+  advance(world, 3);
+  sim.systems.floatBodies(world);
+  sim.systems.focusProfiles(world);
+  assert(companions.every((profile) => profile.get(sim.ProfileFocus).scale === 1));
+});
+
 void test('drops the charter over the pastel profiles without moving the camera', (t) => {
-  const { world, camera, charter, timeline, timelineEntity, profiles, contributors, charterScreen } =
+  const { world, camera, charter, timeline, timelineEntity, profiles, paulCommunity, charterScreen } =
     createScene(t);
   const stars = [...world.query(sim.Principle)];
   assert(charter.has(sim.Hidden));
-  timeline.goTo('profiles');
-  advance(world, contributors.get(sim.ScreenTransition).duration);
+  timeline.goTo('paul-community');
+  advance(world, paulCommunity.get(sim.ScreenTransition).duration);
   const profileCamera = { ...camera.get(sim.Position) };
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), charterScreen);
@@ -638,9 +780,9 @@ void test('drops the charter over the pastel profiles without moving the camera'
   timeline.previous();
   assert.deepEqual(camera.get(sim.Position), profileCamera);
   assert(charter.has(sim.Hidden));
-  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), contributors);
-  assert.equal(contributors.get(sim.Screen).background, 'pastel');
-  advance(world, contributors.get(sim.ScreenTransition).duration);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), paulCommunity);
+  assert.equal(paulCommunity.get(sim.Screen).background, 'pastel');
+  advance(world, paulCommunity.get(sim.ScreenTransition).duration);
 
   timeline.next();
   advance(world, duration);

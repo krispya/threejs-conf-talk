@@ -1,16 +1,20 @@
 import { useFrame, useTexture } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useHas, useQuery, useQueryFirst, useTrait, useWorld } from 'koota/react';
+import { useHas, useQuery, useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
 import { lerp } from 'math';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { SRGBColorSpace, type Group, type MeshBasicMaterial } from 'three/webgpu';
 import { profiles } from '../../data/profiles.js';
 import {
   Anchor,
+  ActiveScreen,
+  getRevealProgress,
   getTransitionProgress,
   Hidden,
   Profile,
+  ProfileFocus,
   Ref,
+  Screen,
   Size,
   Timeline,
 } from '../../sim/index.js';
@@ -39,6 +43,8 @@ function ProfileView({ entity, timeline }: { entity: Entity; timeline: Entity | 
     texture.colorSpace = SRGBColorSpace;
   });
   const timing = useTrait(timeline, Timeline);
+  const screen = useTarget(timeline, ActiveScreen);
+  const focusing = Boolean(useTrait(screen, Screen)?.focusedProfile);
   const visible = !useHas(entity, Hidden);
   const [present, setPresent] = useState(visible);
   const progress = useRef(visible ? 1 : 0);
@@ -77,10 +83,16 @@ function ProfileView({ entity, timeline }: { entity: Entity; timeline: Entity | 
       const portrait = portraitRef.current;
       const border = borderRef.current;
       const { from, target } = transition.current;
-      if (!group || !portrait || !border || progress.current === target) return;
+      if (!group || !portrait || !border) return;
 
-      progress.current = lerp(from, target, getTransitionProgress(world));
-      group.scale.setScalar(Math.max(0.001, progress.current));
+      progress.current = lerp(
+        from,
+        target,
+        focusing ? getRevealProgress(world) : getTransitionProgress(world)
+      );
+      group.scale.setScalar(
+        Math.max(0.001, progress.current * (entity.get(ProfileFocus)?.scale ?? 1))
+      );
       portrait.opacity = progress.current;
       border.opacity = progress.current * 0.7;
 

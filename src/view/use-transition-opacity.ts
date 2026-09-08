@@ -17,7 +17,14 @@ export function useTransitionOpacity(
     delayed = false,
     duration,
     delay = 0,
-  }: { restartOnChange?: boolean; delayed?: boolean; duration?: number; delay?: number } = {}
+    ease = easing.cubicOut,
+  }: {
+    restartOnChange?: boolean;
+    delayed?: boolean;
+    duration?: number;
+    delay?: number;
+    ease?: (progress: number) => number;
+  } = {}
 ) {
   const world = useWorld();
   const timeline = useQueryFirst(Timeline);
@@ -46,7 +53,7 @@ export function useTransitionOpacity(
         from,
         target,
         duration !== undefined
-          ? easing.cubicOut(
+          ? ease(
               clamp(
                 (world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - delay) /
                   Math.max(0.001, duration),

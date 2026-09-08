@@ -20,6 +20,7 @@ import {
   Position,
   PreviousScreen,
   Profile,
+  ProfileFocus,
   Screen,
   ScreenOf,
   ScreenTransition,
@@ -77,6 +78,8 @@ export const timelineActions = createActions((world) => {
       packagesVisible,
       packageNames,
       profilesVisible,
+      focusedProfile,
+      surroundingProfiles,
       packageSizing,
       constellation,
       constellationMap,
@@ -104,7 +107,19 @@ export const timelineActions = createActions((world) => {
       else entity.add(Hidden);
     }
     for (const entity of world.query(Profile)) {
-      if (profilesVisible) entity.remove(Hidden);
+      const login = entity.get(Profile)!.login;
+      const focused = focusedProfile === login;
+      const slot = surroundingProfiles.indexOf(login);
+      const focus = entity.get(ProfileFocus);
+      if (focus) {
+        entity.set(ProfileFocus, {
+          from: focus.value,
+          to: focused || slot >= 0 ? 1 : 0,
+          slot: focused ? -1 : slot >= 0 ? slot : focus.slot,
+          count: slot >= 0 ? surroundingProfiles.length : focus.count,
+        });
+      }
+      if (profilesVisible && (!focusedProfile || focused || slot >= 0)) entity.remove(Hidden);
       else entity.add(Hidden);
     }
     for (const entity of world.query(Charter)) {

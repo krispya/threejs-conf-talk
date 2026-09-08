@@ -1,4 +1,5 @@
 export * from './float-bodies.js';
+export * from './focus-profiles.js';
 export * from './layout-constellations.js';
 export * from './move-camera.js';
 export * from './place-packages.js';

@@ -20,6 +20,7 @@ import {
   Position,
   Principle,
   Profile,
+  ProfileFocus,
   Rotation,
   Size,
   SizeTransition,
@@ -130,6 +131,7 @@ export const actions = createActions((world) => ({
   createProfile: (login: string, avatar: string, index: number, depthIndex = index) =>
     world.spawn(
       Profile({ login, avatar, index }),
+      ProfileFocus,
       Hidden,
       Size({ radius: 0.55 + (index % 4) * 0.07 }),
       Position,
