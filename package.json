@@ -10,10 +10,19 @@
     "typecheck:watch": "tsc --build --watch",
     "lint": "oxlint -c .config/oxlint.json",
     "format": "prettier --config .config/prettier.json --ignore-path .config/prettierignore --write .",
-    "bake": "pnpm bake:geist && pnpm bake:geist-mono && pnpm bake:geist-geometry && pnpm bake:code",
+    "bake": "pnpm bake:geist && pnpm bake:geist-regular && pnpm bake:geist-mono && pnpm bake:geist-geometry && pnpm bake:code",
     "bake:code": "node scripts/bake-code.mjs",
+    "bake:discord-qr": "node scripts/bake-discord-qr.mjs",
+    "bake:portal": "node scripts/bake-portal.mjs",
+    "bake:glyph": "node scripts/bake-glyph.mjs",
+    "bake:math": "node scripts/bake-math.mjs",
+    "bake:experimental": "node scripts/bake-experimental.mjs",
+    "bake:design-system": "node scripts/bake-design-system.mjs",
+    "bake:r3f-v10": "node scripts/bake-r3f-v10.mjs",
+    "bake:robot": "pnpm dlx @gltf-transform/cli@4.5.0 optimize reference/robot_emoji_apple/scene.gltf public/meshes/robot_emoji_apple/scene.glb --compress meshopt --simplify false --palette false --prune-solid-textures false",
     "bake:geist-geometry": "node scripts/bake-geist-geometry.mjs",
     "bake:geist": "glyph bake --input public/fonts/Geist-Black.ttf --output public/fonts/geist-black.font.glb --unicodes U+0020-007E --msdf --slug",
+    "bake:geist-regular": "glyph bake --input public/fonts/Geist-Regular.ttf --output public/fonts/geist-regular.font.glb --unicodes U+0020-007E --msdf --slug",
     "bake:geist-mono": "glyph bake --input public/fonts/GeistMono-Medium.ttf --output public/fonts/geist-mono.font.glb --unicodes U+0020-007E --msdf --slug"
   },
   "dependencies": {
@@ -36,6 +45,7 @@
     "oxlint": "^1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.9.6",
+    "qrcode": "1.5.4",
     "shiki": "^4.4.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"

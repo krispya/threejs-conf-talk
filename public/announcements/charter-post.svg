@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1346" height="1530" viewBox="0 0 1346 1530">
+  <rect width="1346" height="1530" fill="white" />
+  <path d="M26 0v1530M1343 0v1530" stroke="#eff3f4" />
+  <circle cx="106" cy="71" r="44" fill="black" />
+  <g transform="translate(62 27) scale(.88)">
+    <path d="M41.5 29.5h27v41h-27z" fill="white" />
+    <path d="M27 41.5h31v30H27z" fill="black" />
+    <path
+      d="M28.75 43.75h12.5v12.5h-12.5zM43.75 43.75h12.5v12.5h-12.5zM43.75 58.75h12.5v12.5h-12.5z"
+      fill="white"
+    />
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" fill="#0f1419">
+    <text x="168" y="60" font-size="34" font-weight="700">Poimandres</text>
+    <text x="168" y="104" font-size="34" fill="#536471">@pmndrs</text>
+    <circle cx="384" cy="49" r="16" fill="#1d9bf0" />
+    <path
+      d="m377 49 5 5 9-11"
+      fill="none"
+      stroke="white"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <rect x="1027" y="27" width="163" height="70" rx="35" />
+    <text x="1064" y="73" font-size="32" font-weight="700" fill="white">Boost</text>
+    <path
+      d="M1244 49c-31-7-40 28-14 28 21 0 24-24 9-26m-29 30 36-37"
+      fill="none"
+      stroke="#0f1419"
+      stroke-width="4"
+    />
+    <g fill="#536471">
+      <circle cx="1275" cy="63" r="3.5" />
+      <circle cx="1287" cy="63" r="3.5" />
+      <circle cx="1299" cy="63" r="3.5" />
+    </g>
+    <text x="62" y="185" font-size="38">
+      Pmndrs is an open source dev collective, but it hasn&#x27;t always been clear
+    </text>
+    <text x="62" y="238" font-size="38">
+      what that means. We are going through a lot of changes right now as part
+    </text>
+    <text x="62" y="290" font-size="38">of that journey and I want to bring you along.</text>
+    <text x="62" y="396" font-size="38">It all starts with our mission:</text>
+    <text x="62" y="502" font-size="38">
+      &quot;Poimandres is an open source developer collective for creative
+    </text>
+    <text x="62" y="555" font-size="38">
+      technology and developer tooling. We make things for people who make
+    </text>
+    <text x="62" y="607" font-size="38">
+      things because we believe code can be a craft, a creative medium, and a
+    </text>
+    <text x="62" y="660" font-size="38">
+      source of joy. Our projects are sustained through shared effort, mutual
+    </text>
+    <text x="62" y="713" font-size="38">support, and trust.&quot;</text>
+    <text x="62" y="818" font-size="38">
+      Followed by our core principles: simplicity, pragmatism, stability and
+    </text>
+    <text x="62" y="871" font-size="38">
+      quality. These have stayed consistent from the beginning of pmndrs over 8
+    </text>
+    <text x="62" y="924" font-size="38">years ago!</text>
+    <text x="62" y="1030" font-size="38">So what is changing?</text>
+    <text x="62" y="1136" font-size="38">
+      Before we were a self-organized group of developers with a shared
+    </text>
+    <text x="62" y="1188" font-size="38">
+      passion and commitment, but this ran its course as people&#x27;s priorities
+    </text>
+    <text x="62" y="1241" font-size="38">
+      changed and passions moved elsewhere. On top of this, sometimes
+    </text>
+    <text x="62" y="1294" font-size="38">
+      members would be working of the same idea in parallel or having
+    </text>
+    <text x="62" y="1347" font-size="38">
+      competing interests. To keep pmndrs and its current and future libraries
+    </text>
+    <text x="62" y="1399" font-size="38">
+      healthy we needed to seriously organize, align on priorities and direct
+    </text>
+    <text x="62" y="1452" font-size="38">resources.</text>
+  </g>
+</svg>

@@ -21,3 +21,4 @@
 *.pdf binary
 *.glb binary
 *.gltf binary
+*.bin binary
