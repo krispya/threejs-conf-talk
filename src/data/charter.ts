@@ -7,9 +7,9 @@ export const charter = {
   firstCommittedAt: '2026-07-22T20:51:19Z',
   sections: [
     '1. Mission',
-    '2. Core Principles',
+    '2. Principles',
     '3. Membership',
-    '4. Decision-Making',
+    '4. Decisions',
     '5. Adopting Projects',
     '6. Initiatives',
     '7. Project Policy',

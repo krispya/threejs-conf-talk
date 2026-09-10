@@ -1,12 +1,12 @@
 import { useQueryFirst, useTarget, useTrait } from 'koota/react';
 import { ActiveScreen, Screen, Timeline } from '../sim/index.js';
 
-/** The opening sequence's branding slides away as the warp portal opens. */
+/** The opening sequence's branding slides away as the warp portal opens and returns for the send off. */
 export function BrandMark() {
   const timeline = useQueryFirst(Timeline);
   const screen = useTarget(timeline, ActiveScreen);
   const data = useTrait(screen, Screen);
-  const hidden = !!data && (!data.titleVisible || data.warpVisible);
+  const hidden = !!data && ((!data.titleVisible && !data.closingVisible) || data.warpVisible);
 
   return (
     <svg

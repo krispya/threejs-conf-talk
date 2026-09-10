@@ -21,7 +21,6 @@ export function Startup() {
     createLetter,
     createPackage,
     createProfile,
-    createPrinciplesConstellation,
   } = useActions(actions);
   const { start, stop } = useActions(timelineActions);
 
@@ -30,7 +29,6 @@ export function Startup() {
     const title = createTitle();
     const charter = createCharter();
     const initiatives = createInitiatives();
-    const principles = createPrinciplesConstellation();
     const letters = Array.from(WORD, (char, index) => createLetter(char, index));
 
     const max = Math.max(...packages.map((pkg) => pkg.downloads));
@@ -59,7 +57,6 @@ export function Startup() {
         camera,
         title,
         charter,
-        principles,
         ...letters,
         ...blobs,
         ...portraits,
@@ -75,7 +72,6 @@ export function Startup() {
     createLetter,
     createPackage,
     createProfile,
-    createPrinciplesConstellation,
     start,
     stop,
   ]);

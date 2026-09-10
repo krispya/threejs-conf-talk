@@ -17,27 +17,34 @@ export function PackageDownloads({
   timeline,
   radius,
   visible,
+  showRate,
   exitDuration,
 }: {
   entity: Entity;
   timeline: Entity | undefined;
   radius: number;
   visible: boolean;
+  showRate: boolean;
   exitDuration: number | undefined;
 }) {
   const world = useWorld();
   const timing = useTrait(timeline, Timeline);
   const { downloads } = useTrait(entity, Package)!;
   const [present, setPresent] = useState(visible);
+  // The rate stays fixed for as long as a ticker is on screen so its chip never resizes.
+  const [rate, setRate] = useState(showRate);
   const font = useMSDF(fonts.mono);
   const formatter = useMemo(() => new Intl.NumberFormat('en-US'), []);
-  const width = formatter.format(downloads).length * 0.32 * 0.62 + 0.24;
+  const suffix = rate ? ' dl/wk' : '';
+  const width = (formatter.format(downloads).length + suffix.length) * 0.32 * 0.62 + 0.24;
   const groupRef = useRef<Group>(null);
   const numberRef = useRef<ComponentRef<typeof Text>>(null);
   const backdropRef = useRef<MeshBasicNodeMaterial>(null);
   const animation = useRef({
     startedAt: 0,
     countStartedAt: 0,
+    countDuration: 0,
+    counting: false,
     stagger: 0,
     fromOpacity: 0,
     opacity: 0,
@@ -58,6 +65,7 @@ export function PackageDownloads({
   });
 
   if (visible && !present) setPresent(true);
+  if (visible && rate !== showRate) setRate(showRate);
 
   useLayoutEffect(() => {
     const now = world.get(Time)!.elapsed;
@@ -71,7 +79,7 @@ export function PackageDownloads({
       state.y = -0.42;
       state.scale = 0.92;
       state.value = 0;
-      numberRef.current?.set({ text: '0' });
+      numberRef.current?.set({ text: `0${suffix}` });
       if (groupRef.current) groupRef.current.visible = false;
     }
     state.fromOpacity = state.opacity;
@@ -89,12 +97,15 @@ export function PackageDownloads({
       : exitDuration !== undefined
         ? (timing?.startedAt ?? now)
         : now + (visible ? 0 : state.stagger * 0.5);
-    if (visible) {
+    // Advancing to the robot keeps the same counter running from its original start
+    if (visible && !state.counting) {
       state.countStartedAt = state.startedAt;
+      state.countDuration = screen?.packageLayout === 'community' ? 3.2 : 0;
       state.countFrom = Math.max(0, state.value);
       state.tick = -1;
     }
-  }, [visible, timing, world, entity, timeline, exitDuration]);
+    state.counting = visible;
+  }, [visible, timing, world, entity, timeline, exitDuration, suffix]);
 
   useFrame(
     () => {
@@ -141,8 +152,16 @@ export function PackageDownloads({
       const countElapsed = Math.max(0, world.get(Time)!.elapsed - state.countStartedAt);
       const tick = Math.floor(countElapsed * 30);
       if (visible && tick !== state.tick && state.value !== downloads) {
-        const value = Math.round(lerp(state.countFrom, downloads, 1 - Math.exp(-countElapsed / 1.2)));
-        if (value !== state.value) number.set({ text: formatter.format(value) });
+        const value = Math.round(
+          lerp(
+            state.countFrom,
+            downloads,
+            state.countDuration > 0
+              ? easing.cubicOut(clamp(countElapsed / state.countDuration, 0, 1))
+              : 1 - Math.exp(-countElapsed / 1.2)
+          )
+        );
+        if (value !== state.value) number.set({ text: `${formatter.format(value)}${suffix}` });
         state.tick = tick;
         state.value = value;
       }
@@ -179,7 +198,7 @@ export function PackageDownloads({
           layout={{ align: 'center', wrap: 'none' }}
           style={{ fontSize: 0.32, lineHeight: 1, color: '#ffffff', opacity: 0 }}
         >
-          0
+          {`0${suffix}`}
         </Text>
       </TextGroup>
     </group>

@@ -1,6 +1,6 @@
 import { useFrame, useLoader } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useHas, useQuery, useTrait } from 'koota/react';
+import { useQuery, useTrait } from 'koota/react';
 import { lerp } from 'math';
 import { easing } from 'math/time';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
@@ -16,19 +16,30 @@ import {
   If,
   mix,
   modelViewMatrix,
+  mx_noise_float,
   positionGeometry,
   positionLocal,
   screenDPR,
   smoothstep,
+  time,
   uv,
   varying,
   vec2,
   vec4,
   viewport,
 } from 'three/tsl';
-import { ShapeGeometry, Vector3, type Group, type Mesh } from 'three/webgpu';
-import { Hidden, Position, Ref, Title } from '../../sim/index.js';
+import {
+  BufferGeometry,
+  DoubleSide,
+  Float32BufferAttribute,
+  ShapeGeometry,
+  Vector3,
+  type Group,
+  type Mesh,
+} from 'three/webgpu';
+import { Position, Ref, Title } from '../../sim/index.js';
 import { brand, fonts } from '../../theme.js';
+import { useEntityVisible } from '../use-entity-visible.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { useTitleFlight } from '../use-title-flight.js';
 import { useTitleGlitch } from '../use-title-glitch.js';
@@ -47,7 +58,7 @@ export function TitleRenderer() {
 function TitleView({ entity }: { entity: Entity }) {
   const font = useLoader(FontLoader, fonts.geometry);
   const { text } = useTrait(entity, Title)!;
-  const visible = !useHas(entity, Hidden);
+  const visible = useEntityVisible(entity);
   const opacity = useTransitionOpacity(visible);
   const { motion, scrim, speed, scenery, robotVisible, warpVisible } = useTitleFlight();
   const portal = usePortal();
@@ -114,15 +125,107 @@ function TitleView({ entity }: { entity: Entity }) {
       faceOpacity: letterOpacity.mul(portal.outside),
     };
   }, [letterOpacity, portal.outside, speed]);
+  const fragmentMaterial = useMemo(() => {
+    const acceleration = smoothstep(0, 1, speed);
+    const warp = smoothstep(1, 4, speed);
+    const particle = attribute<'vec4'>('particle', 'vec4');
+    // Each fragment has its own lifetime and tumbles away from a point on the contour.
+    const age = time.mul(particle.y.mul(0.3).add(0.4)).add(particle.x).fract();
+    const travel = age
+      .pow(1.4)
+      .mul(acceleration.mul(0.16).add(warp.mul(0.65)))
+      .mul(particle.y.mul(0.7).add(0.65));
+    const clip = cameraProjectionMatrix.mul(modelViewMatrix).mul(vec4(positionLocal, 1));
+    const curl = age
+      .pow(2)
+      .mul(acceleration.mul(0.1).add(warp.mul(0.48)))
+      .mul(particle.w.mul(0.8).add(0.4));
+    const radial = clip.xy.mul(viewport.zw).mul(travel.add(1));
+    const twisted = vec2(
+      radial.x.mul(curl.cos()).sub(radial.y.mul(curl.sin())),
+      radial.x.mul(curl.sin()).add(radial.y.mul(curl.cos()))
+    ).div(viewport.zw);
+    const spin = particle.w.mul(6.28).add(age.mul(particle.y.mul(8).sub(4)));
+    const corner = uv()
+      .mul(2)
+      .sub(1)
+      .mul(vec2(particle.y.mul(1.1).add(0.7), 1));
+    const size = particle.z
+      .pow(2)
+      .mul(3.5)
+      .add(1.25)
+      .mul(smoothstep(0.55, 1, age).oneMinus())
+      .mul(acceleration);
+    const tumble = vec2(
+      corner.x.mul(spin.cos()).sub(corner.y.mul(spin.sin())),
+      corner.x.mul(spin.sin()).add(corner.y.mul(spin.cos()))
+    );
+    const outward = twisted.mul(viewport.zw);
+    const direction = outward.div(outward.length().max(0.000001));
+    const dash = direction
+      .mul(corner.x)
+      .mul(warp.mul(1.8).add(1.6))
+      .add(vec2(direction.y.negate(), direction.x).mul(corner.y).mul(0.32));
+    const offset = mix(tumble, dash, particle.w.greaterThan(0.75).select(1, 0))
+      .mul(size)
+      .mul(screenDPR)
+      .mul(2)
+      .div(viewport.zw)
+      .mul(clip.w);
+    const shape = uv().mul(2).sub(1);
+    const chipped = shape
+      .dot(shape)
+      .add(mx_noise_float(shape.mul(4).add(varying(particle.w).mul(17))).mul(0.28));
+    return {
+      vertex: clip.w
+        .greaterThan(cameraNear)
+        .select(vec4(twisted.add(offset), clip.zw), vec4(0, 0, 0, -1)),
+      opacity: smoothstep(0.68, 0.82, chipped)
+        .oneMinus()
+        .mul(smoothstep(0, 0.035, varying(age)))
+        .mul(0.85)
+        .mul(acceleration)
+        .mul(letterOpacity)
+        .mul(portal.outside),
+    };
+  }, [speed, letterOpacity, portal.outside]);
   const lines = useMemo(
     () =>
       text.split('\n').map((line) => {
         const shapes = font.generateShapes(line, 1);
         const vertices: number[] = [];
+        const fragmentPositions: number[] = [];
+        const fragmentUvs: number[] = [];
+        const fragmentData: number[] = [];
+        const fragmentIndices: number[] = [];
         // Smooth contour rings and spaced depth rails keep the extrusion legible.
         for (const shape of shapes) {
           for (const path of [shape, ...shape.holes]) {
             const contour = path.getPoints(12);
+            for (const point of path.getSpacedPoints(
+              Math.max(4, Math.ceil(path.getLength() / 0.12))
+            )) {
+              const offset = fragmentPositions.length / 3;
+              const seed = offset / 4 + 1;
+              for (let corner = 0; corner < 4; corner++) {
+                fragmentPositions.push(point.x, point.y, 0);
+                fragmentData.push(
+                  (seed * 0.618034) % 1,
+                  (seed * 0.754878) % 1,
+                  (seed * 0.56984) % 1,
+                  (seed * 0.43829) % 1
+                );
+              }
+              fragmentUvs.push(0, 0, 1, 0, 0, 1, 1, 1);
+              fragmentIndices.push(
+                offset,
+                offset + 1,
+                offset + 2,
+                offset + 2,
+                offset + 1,
+                offset + 3
+              );
+            }
             for (const z of [0, -0.6, -1.8, -5.4, -16.2, -48.6, -145.8]) {
               for (let i = 0; i < contour.length; i++) {
                 const a = contour[i];
@@ -138,15 +241,21 @@ function TitleView({ entity }: { entity: Entity }) {
           }
         }
         const wire = new LineSegmentsGeometry().setPositions(vertices);
-        return { face: new ShapeGeometry(shapes, 12), wire };
+        const fragments = new BufferGeometry();
+        fragments.setAttribute('position', new Float32BufferAttribute(fragmentPositions, 3));
+        fragments.setAttribute('uv', new Float32BufferAttribute(fragmentUvs, 2));
+        fragments.setAttribute('particle', new Float32BufferAttribute(fragmentData, 4));
+        fragments.setIndex(fragmentIndices);
+        return { face: new ShapeGeometry(shapes, 12), wire, fragments };
       }),
     [font, text]
   );
   useEffect(
     () => () =>
-      lines.forEach(({ face, wire }) => {
+      lines.forEach(({ face, wire, fragments }) => {
         face.dispose();
         wire.dispose();
+        fragments.dispose();
       }),
     [lines]
   );
@@ -192,8 +301,25 @@ function TitleView({ entity }: { entity: Entity }) {
     <group ref={handleInit} name="talk-title" visible={false}>
       <group ref={scenery} name="flight-scenery" matrixAutoUpdate={false}>
         <group ref={lettering} name="distant-title" rotation={[0, -0.008, 0]}>
-          {lines.map(({ face, wire }, index) => (
+          {lines.map(({ face, wire, fragments }, index) => (
             <group key={index} name={`title-line-${index}`} position={[0, 1 - index * 1.03, 0]}>
+              <mesh
+                name="title-motion-fragments"
+                geometry={fragments}
+                frustumCulled={false}
+                renderOrder={-11}
+              >
+                <meshBasicNodeMaterial
+                  color="#000000"
+                  vertexNode={fragmentMaterial.vertex}
+                  opacityNode={fragmentMaterial.opacity}
+                  maskNode={portal.mask}
+                  side={DoubleSide}
+                  transparent
+                  depthWrite={false}
+                  toneMapped={false}
+                />
+              </mesh>
               <mesh geometry={face} position={[0, 0, 0.002]} renderOrder={-10}>
                 <meshBasicNodeMaterial
                   color="#000000"

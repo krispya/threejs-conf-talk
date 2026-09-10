@@ -11,9 +11,9 @@ const {
   updateAnchors,
   placePackages,
   placeProfiles,
-  layoutConstellations,
   floatBodies,
   focusProfiles,
+  wanderProfiles,
   syncTransforms,
   updateBounds,
 } = systems;
@@ -30,9 +30,9 @@ export function FrameLoop() {
     updateAnchors(world);
     placePackages(world);
     placeProfiles(world, profileLayout);
-    layoutConstellations(world);
     floatBodies(world);
     focusProfiles(world);
+    wanderProfiles(world);
     syncTransforms(world);
 
     updateBounds(world, state.viewport.getCurrentViewport(state.camera));

@@ -1,189 +1,174 @@
-/* Screen-space backdrop capture for glass, after https://github.com/ektogamat/webgpu-glass-drei.
-   Once per frame the scene is rendered without the glass meshes into a mipmapped target that the
-   glass material then refracts. */
 import { texture } from 'three/tsl';
 import {
   BackSide,
-  Color,
   HalfFloatType,
   LinearFilter,
   LinearMipmapLinearFilter,
-  NoToneMapping,
   NodeUpdateType,
   RenderTarget,
   Vector2,
+  type Camera,
+  type Mesh,
+  type Object3D,
+  type Scene,
+  type Side,
+  type WebGPURenderer,
 } from 'three/webgpu';
-import type { Camera, Material, Mesh, Object3D, Scene, Side, WebGPURenderer } from 'three/webgpu';
 import type { GlassPhysicalNodeMaterial } from './glass-material-core.js';
 
-/** userData flag: objects that sit on the glass and must not be captured into the backdrop. */
+/** Surface labels are drawn normally but excluded from the image inside the glass. */
 export const EXCLUDE_FROM_BACKDROP = 'excludeFromBackdrop';
 
 export interface BackdropConfig {
   backside: boolean;
   backsideThickness: number;
-  thickness: number;
-  backdropResolutionScale: number;
-  backsideResolutionScale: number;
-  background: string | Color;
 }
 
-const TARGET_OPTIONS = {
-  type: HalfFloatType,
-  minFilter: LinearMipmapLinearFilter,
-  magFilter: LinearFilter,
-  generateMipmaps: true,
-};
-
-const scratchSize = new Vector2();
-
-function scaledSize(renderer: WebGPURenderer, scale: number) {
-  renderer.getDrawingBufferSize(scratchSize);
-  return {
-    width: Math.max(1, Math.round(scratchSize.x * scale)),
-    height: Math.max(1, Math.round(scratchSize.y * scale)),
-  };
-}
-
-function createTarget(width: number, height: number, name: string) {
-  const target = new RenderTarget(width, height, TARGET_OPTIONS);
+function createTarget(name: string) {
+  const target = new RenderTarget(1, 1, {
+    type: HalfFloatType,
+    minFilter: LinearMipmapLinearFilter,
+    magFilter: LinearFilter,
+    generateMipmaps: true,
+  });
   target.texture.name = name;
   return target;
 }
 
-function isMesh(object: Object3D): object is Mesh {
-  return (object as Mesh).isMesh === true;
+/** One capture owner per canvas, independent of the number or ordering of glass materials. */
+export function createTransmissionBackdrop() {
+  const cleanTarget = createTarget('TransmissionBackdropClean');
+  const textureNode = texture(cleanTarget.texture);
+  textureNode.updateBeforeType = NodeUpdateType.NONE;
+  return {
+    cleanTarget,
+    backsideTarget: createTarget('TransmissionBackdropBackside'),
+    textureNode,
+    materials: new Map<GlassPhysicalNodeMaterial, { side: Side; thickness: number }>(),
+    hidden: [] as Mesh[],
+    excluded: [] as Object3D[],
+    size: new Vector2(),
+    resolution: 0.85,
+    backsideResolution: 0.7,
+    lastCaptureTick: -1,
+  };
 }
 
-function usesMaterial(mesh: Mesh, materials: Set<Material>) {
-  const material = mesh.material;
-  return Array.isArray(material) ? material.some((m) => materials.has(m)) : materials.has(material);
+export type TransmissionBackdrop = ReturnType<typeof createTransmissionBackdrop>;
+
+export function registerTransmissionMaterial(
+  backdrop: TransmissionBackdrop,
+  material: GlassPhysicalNodeMaterial
+) {
+  backdrop.materials.set(material, {
+    side: material.side,
+    thickness: material.transmissionUniforms.thickness.value,
+  });
 }
 
-export class TransmissionBackdropManager {
-  readonly materials = new Set<GlassPhysicalNodeMaterial>();
-  private readonly cleanTarget = createTarget(1, 1, 'TransmissionBackdropClean');
-  private readonly backsideTarget = createTarget(1, 1, 'TransmissionBackdropBackside');
-  readonly textureNode = texture(this.cleanTarget.texture);
-  private lastCaptureTick = -1;
+export function disposeTransmissionBackdrop(backdrop: TransmissionBackdrop) {
+  backdrop.cleanTarget.dispose();
+  backdrop.backsideTarget.dispose();
+  backdrop.materials.clear();
+  backdrop.hidden.length = backdrop.excluded.length = 0;
+  backdrop.lastCaptureTick = -1;
+}
 
-  // Targets are local JS descriptors until the first committed capture uses them
-  constructor() {
-    this.textureNode.updateBeforeType = NodeUpdateType.NONE;
+export function captureTransmissionBackdrop(
+  backdrop: TransmissionBackdrop,
+  renderer: WebGPURenderer,
+  scene: Scene,
+  camera: Camera,
+  frameTick: number
+) {
+  if (!backdrop.materials.size || backdrop.lastCaptureTick === frameTick) return;
+  const { materials, hidden, excluded, cleanTarget, backsideTarget, textureNode } = backdrop;
+  hidden.length = excluded.length = 0;
+  let backside = false;
+  for (const [material, restore] of materials) {
+    backside ||= material.transmissionBackdropConfig.backside;
+    restore.side = material.side;
+    restore.thickness = material.transmissionUniforms.thickness.value;
   }
-
-  register(material: GlassPhysicalNodeMaterial) {
-    this.materials.add(material);
-  }
-
-  unregister(material: GlassPhysicalNodeMaterial) {
-    this.materials.delete(material);
-  }
-
-  private resizeTargets(renderer: WebGPURenderer, config: BackdropConfig) {
-    const clean = scaledSize(
-      renderer,
-      config.backside ? config.backsideResolutionScale : config.backdropResolutionScale
-    );
-    this.cleanTarget.setSize(clean.width, clean.height);
-
-    if (config.backside) {
-      const size = scaledSize(renderer, config.backdropResolutionScale);
-      this.backsideTarget.setSize(size.width, size.height);
+  scene.traverseVisible((object) => {
+    const mesh = object as Mesh;
+    if (
+      mesh.isMesh &&
+      (Array.isArray(mesh.material)
+        ? mesh.material.some((material) => materials.has(material as GlassPhysicalNodeMaterial))
+        : materials.has(mesh.material as GlassPhysicalNodeMaterial))
+    ) {
+      hidden.push(mesh);
+      mesh.visible = false;
+    } else if (object.userData[EXCLUDE_FROM_BACKDROP]) {
+      excluded.push(object);
+      object.visible = false;
     }
+  });
+  if (!hidden.length) {
+    for (const object of excluded) object.visible = true;
+    return;
   }
 
-  dispose() {
-    this.cleanTarget.dispose();
-    this.backsideTarget.dispose();
-    this.textureNode.value = this.cleanTarget.texture;
-    this.materials.clear();
-    this.lastCaptureTick = -1;
-  }
-
-  capture(renderer: WebGPURenderer, scene: Scene, camera: Camera, frameTick: number) {
-    const first = this.materials.values().next().value;
-    if (!first) return;
-    if (frameTick === this.lastCaptureTick) return;
-    const config = first.transmissionBackdropConfig;
-    this.resizeTargets(renderer, config);
-
-    const textureNode = this.textureNode;
-    const cleanTarget = this.cleanTarget;
-
-    const prevTarget = renderer.getRenderTarget();
-    const prevAutoClear = renderer.autoClear;
-    const prevBackground = scene.background;
-    const prevToneMapping = renderer.toneMapping;
-    const prevExposure = renderer.toneMappingExposure;
-    const prevTexture = textureNode.value;
-
-    const materials = this.materials as unknown as Set<Material>;
-    const hidden: Mesh[] = [];
-    const excluded: Object3D[] = [];
-    const restore: Array<{ material: GlassPhysicalNodeMaterial; thickness: number; side: Side }> = [];
-    let captured = false;
-    scene.traverseVisible((object) => {
-      if (isMesh(object) && usesMaterial(object, materials)) {
-        hidden.push(object);
-        object.visible = false;
-      } else if (object.userData[EXCLUDE_FROM_BACKDROP]) {
-        excluded.push(object);
-        object.visible = false;
-      }
-    });
-
-    try {
-      scene.background =
-        config.background instanceof Color ? config.background : new Color(config.background);
-      renderer.toneMapping = NoToneMapping;
-      renderer.toneMappingExposure = 1;
-
-      // Clean pass: everything except the glass
-      renderer.setRenderTarget(cleanTarget);
-      renderer.autoClear = true;
-      renderer.render(scene, camera);
-
-      for (const mesh of hidden) mesh.visible = true;
-
-      if (config.backside) {
-        // Backside pass: glass back faces refracting the clean capture
-        textureNode.value = cleanTarget.texture;
-
-        for (const material of this.materials) {
-          restore.push({
-            material,
-            thickness: material.transmissionUniforms.thickness.value,
-            side: material.side,
-          });
+  const previousTarget = renderer.getRenderTarget();
+  const previousCubeFace = renderer.getActiveCubeFace();
+  const previousMipmap = renderer.getActiveMipmapLevel();
+  const previousAutoClear = renderer.autoClear;
+  const previousTexture = textureNode.value;
+  let captured = false;
+  try {
+    renderer.getDrawingBufferSize(backdrop.size);
+    const cleanScale = backside ? backdrop.backsideResolution : backdrop.resolution;
+    cleanTarget.setSize(
+      Math.max(1, Math.round(backdrop.size.x * cleanScale)),
+      Math.max(1, Math.round(backdrop.size.y * cleanScale))
+    );
+    if (backside)
+      backsideTarget.setSize(
+        Math.max(1, Math.round(backdrop.size.x * backdrop.resolution)),
+        Math.max(1, Math.round(backdrop.size.y * backdrop.resolution))
+      );
+    // The scene owns its background, including video and every transition blend.
+    renderer.setRenderTarget(cleanTarget);
+    renderer.autoClear = true;
+    renderer.render(scene, camera);
+    if (backside) {
+      textureNode.value = cleanTarget.texture;
+      for (const material of materials.keys()) {
+        if (material.transmissionBackdropConfig.backside) {
           material.side = BackSide;
           material.transmissionUniforms.thickness.value =
             material.transmissionBackdropConfig.backsideThickness;
         }
-
-        renderer.setRenderTarget(this.backsideTarget);
-        renderer.autoClear = true;
-        renderer.render(scene, camera);
-
-        textureNode.value = this.backsideTarget.texture;
-      } else {
-        textureNode.value = cleanTarget.texture;
       }
-      this.lastCaptureTick = frameTick;
-      captured = true;
-    } finally {
-      for (const { material, thickness, side } of restore) {
-        material.side = side;
-        material.transmissionUniforms.thickness.value = thickness;
+      for (const mesh of hidden) {
+        const material = mesh.material;
+        mesh.visible = Array.isArray(material)
+          ? material.some(
+              (entry) =>
+                materials.has(entry as GlassPhysicalNodeMaterial) &&
+                (entry as GlassPhysicalNodeMaterial).transmissionBackdropConfig.backside
+            )
+          : materials.has(material as GlassPhysicalNodeMaterial) &&
+            (material as GlassPhysicalNodeMaterial).transmissionBackdropConfig.backside;
       }
-      if (!captured) textureNode.value = prevTexture;
-      for (const mesh of hidden) mesh.visible = true;
-      for (const object of excluded) object.visible = true;
-      scene.background = prevBackground;
-      renderer.toneMapping = prevToneMapping;
-      renderer.toneMappingExposure = prevExposure;
-      renderer.setRenderTarget(prevTarget);
-      renderer.autoClear = prevAutoClear;
+      renderer.setRenderTarget(backsideTarget);
+      renderer.render(scene, camera);
     }
+    textureNode.value = backside ? backsideTarget.texture : cleanTarget.texture;
+    backdrop.lastCaptureTick = frameTick;
+    captured = true;
+  } finally {
+    if (backside) {
+      for (const [material, restore] of materials) {
+        material.side = restore.side;
+        material.transmissionUniforms.thickness.value = restore.thickness;
+      }
+    }
+    if (!captured) textureNode.value = previousTexture;
+    for (const mesh of hidden) mesh.visible = true;
+    for (const object of excluded) object.visible = true;
+    renderer.setRenderTarget(previousTarget, previousCubeFace, previousMipmap);
+    renderer.autoClear = previousAutoClear;
   }
 }

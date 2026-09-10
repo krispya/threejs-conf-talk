@@ -1,0 +1,11 @@
+Model Information:
+* title:	robot emoji (Apple)
+* source:	https://sketchfab.com/3d-models/robot-emoji-apple-f737ea86d5e148df8212c60dc00efc28
+* author:	Ambient Designer (https://sketchfab.com/yokara)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "robot emoji (Apple)" (https://sketchfab.com/3d-models/robot-emoji-apple-f737ea86d5e148df8212c60dc00efc28) by Ambient Designer (https://sketchfab.com/yokara) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

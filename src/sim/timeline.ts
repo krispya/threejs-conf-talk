@@ -7,9 +7,6 @@ import {
   ActiveScreen,
   Camera,
   Charter,
-  Constellation,
-  ConstellationExpansion,
-  ConstellationMember,
   FirstScreen,
   Hidden,
   Initiative,
@@ -57,6 +54,10 @@ export const timelineActions = createActions((world) => {
     const timeline = world.queryFirst(Timeline);
     if (!timeline || !screen || !screen.has(ScreenOf(timeline))) return;
     if (timeline.targetFor(ActiveScreen) === screen) return;
+    const fromTeam = timeline.targetFor(ActiveScreen)?.get(Screen)?.teamVisible ?? false;
+    const continuingDeparture =
+      timeline.targetFor(ActiveScreen)?.get(Screen)?.id === 'community-growth' &&
+      screen.get(Screen)?.id === 'community-robot';
 
     world.query(Position, TransitionOrigin).updateEach(([position, origin]) => {
       origin.x = position.x;
@@ -68,6 +69,11 @@ export const timelineActions = createActions((world) => {
     timeline.set(Timeline, {
       startedAt: world.get(Time)!.elapsed,
       duration,
+      departureStartedAt: screen.get(Screen)?.communityDeparture
+        ? continuingDeparture
+          ? timeline.get(Timeline)!.departureStartedAt
+          : world.get(Time)!.elapsed
+        : -1,
     });
     for (const camera of world.query(Camera, TargetPosition)) {
       camera.set(TargetPosition, { x: cameraX, y: cameraY, z: cameraZ });
@@ -80,9 +86,8 @@ export const timelineActions = createActions((world) => {
       profilesVisible,
       focusedProfile,
       surroundingProfiles,
+      recedingProfiles,
       packageSizing,
-      constellation,
-      constellationMap,
       charterVisible,
       initiativesVisible,
     } = screen.get(Screen)!;
@@ -110,16 +115,30 @@ export const timelineActions = createActions((world) => {
       const login = entity.get(Profile)!.login;
       const focused = focusedProfile === login;
       const slot = surroundingProfiles.indexOf(login);
+      // Portraits that already told their story keep their ring and drop behind the
+      // ones arriving in front
+      const receded = recedingProfiles.includes(login);
+      const held = focused || slot >= 0 || receded;
       const focus = entity.get(ProfileFocus);
       if (focus) {
         entity.set(ProfileFocus, {
           from: focus.value,
-          to: focused || slot >= 0 ? 1 : 0,
+          to: held ? 1 : 0,
           slot: focused ? -1 : slot >= 0 ? slot : focus.slot,
           count: slot >= 0 ? surroundingProfiles.length : focus.count,
+          recedeFrom: focus.recede,
+          recedeTo: receded ? 1 : 0,
+          wanderFromX: continuingDeparture ? focus.wanderFromX : focus.wanderX,
+          wanderFromY: continuingDeparture ? focus.wanderFromY : focus.wanderY,
+          wanderFromOpacity: continuingDeparture ? focus.wanderFromOpacity : focus.wanderOpacity,
+          scaleFrom: focus.scale,
+          fromTeam,
         });
       }
-      if (profilesVisible && (!focusedProfile || focused || slot >= 0)) entity.remove(Hidden);
+      // A screen that names no portraits shows everyone, otherwise only the named ones
+      const everyone =
+        !focusedProfile && surroundingProfiles.length === 0 && recedingProfiles.length === 0;
+      if (profilesVisible && (everyone || held)) entity.remove(Hidden);
       else entity.add(Hidden);
     }
     for (const entity of world.query(Charter)) {
@@ -129,20 +148,6 @@ export const timelineActions = createActions((world) => {
     for (const entity of world.query(Initiative)) {
       if (initiativesVisible) entity.remove(Hidden);
       else entity.add(Hidden);
-    }
-    for (const group of world.query(Constellation)) {
-      const visible = group.get(Constellation)!.id === constellation;
-      const expansion = group.get(ConstellationExpansion);
-      if (expansion) {
-        group.set(ConstellationExpansion, {
-          from: expansion.value,
-          to: visible && constellationMap ? 1 : 0,
-        });
-      }
-      for (const entity of [group, ...world.query(ConstellationMember(group))]) {
-        if (visible) entity.remove(Hidden);
-        else entity.add(Hidden);
-      }
     }
     timeline.add(ActiveScreen(screen));
   };
@@ -160,11 +165,9 @@ export const timelineActions = createActions((world) => {
       for (const entity of world.query(Profile)) entity.add(Hidden);
       for (const entity of world.query(Charter)) entity.add(Hidden);
       for (const entity of world.query(Initiative)) entity.add(Hidden);
-      for (const entity of world.query(Constellation)) entity.add(Hidden);
-      for (const entity of world.query(ConstellationMember('*'))) entity.add(Hidden);
       const timeline = world.queryFirst(Timeline);
       timeline?.remove(ActiveScreen('*'));
-      timeline?.set(Timeline, { duration: 0 });
+      timeline?.set(Timeline, { duration: 0, departureStartedAt: -1 });
     },
     next: () => {
       const screen = world.queryFirst(Timeline)?.targetFor(ActiveScreen);
@@ -217,16 +220,23 @@ export function getTransitionProgress(world: World) {
   return easing.cubicOut(progress);
 }
 
-/** Views that opt in can hold until the screen's reveal delay, then ease in over the rest. */
-export function getRevealProgress(world: World) {
+/**
+ * Linear progress across a screen's reveal window, which starts after the reveal delay.
+ * For views that bring their own curve.
+ */
+export function getRevealTime(world: World) {
   const timeline = world.queryFirst(Timeline);
   const timing = timeline?.get(Timeline);
   if (!timeline || !timing || timing.duration <= 0) return 1;
 
   const delay = timeline.targetFor(ActiveScreen)?.get(ScreenTransition)?.revealDelay ?? 0;
-  if (delay <= 0) return getTransitionProgress(world);
   const elapsed = world.get(Time)!.elapsed - timing.startedAt - delay;
-  return easing.cubicOut(clamp(elapsed / Math.max(0.001, timing.duration - delay), 0, 1));
+  return clamp(elapsed / Math.max(0.001, timing.duration - delay), 0, 1);
+}
+
+/** Views that opt in can hold until the screen's reveal delay, then ease in over the rest. */
+export function getRevealProgress(world: World) {
+  return easing.cubicOut(getRevealTime(world));
 }
 
 /** Camera timing can hold at the origin for a beat and then ease out over the remaining time. */
@@ -241,10 +251,17 @@ export function getCameraProgress(world: World) {
     return portalFallMotion(world.get(Time)!.elapsed - timing.startedAt, timing.duration, delay)
       .progress;
   }
-  if (delay <= 0 && transition?.cameraEase !== 'cubicIn') return getTransitionProgress(world);
+  if (delay <= 0 && !transition?.cameraDuration && transition?.cameraEase === 'auto')
+    return getTransitionProgress(world);
+  if (world.get(Time)!.elapsed <= timing.startedAt + delay) return 0;
   const elapsed = world.get(Time)!.elapsed - timing.startedAt - delay;
-  const progress = clamp(elapsed / Math.max(0.001, timing.duration - delay), 0, 1);
+  const progress = clamp(
+    elapsed / Math.max(0.001, transition?.cameraDuration || timing.duration - delay),
+    0,
+    1
+  );
   if (transition?.cameraEase === 'cubicIn') return easing.cubicIn(progress);
+  if (transition?.cameraEase === 'cubicInOut') return easing.cubicInOut(progress);
   // A held camera builds slowly, jumps to speed like a warp drive, and glides in at the end
   return easing.expoInOut(progress);
 }

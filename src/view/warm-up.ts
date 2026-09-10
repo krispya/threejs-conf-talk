@@ -4,6 +4,7 @@ import type { Camera, Object3D, RenderTarget, Scene, WebGPURenderer } from 'thre
  * Compile the pipelines for a hidden subtree ahead of its first visible frame. Projection runs
  * synchronously inside compileAsync, so visibility, culling, and the render target are restored
  * before returning while the pipelines finish building in the background.
+ * The returned promise resolves when those pipelines are ready.
  */
 export function warmUp(
   renderer: WebGPURenderer,
@@ -25,7 +26,8 @@ export function warmUp(
   });
   const previous = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
-  void renderer.compileAsync(object, camera, scene);
+  const pending = renderer.compileAsync(object, camera, scene);
   renderer.setRenderTarget(previous);
   for (const undo of restore) undo();
+  return pending;
 }

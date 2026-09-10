@@ -3,7 +3,7 @@ import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useHas, useQuery, useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
+import { useQuery, useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
 import { type ComponentRef, useCallback, useLayoutEffect, useRef, useState } from 'react';
@@ -12,16 +12,17 @@ import { color } from 'three/tsl';
 import type { BufferGeometry, Group, Mesh, MeshBasicNodeMaterial } from 'three/webgpu';
 import { traits } from '../../sim/index.js';
 import { packageLabelSize } from '../../package-label.js';
-import { brand, fonts, spectrum, theme } from '../../theme.js';
+import { brand, fonts, spectrum } from '../../theme.js';
 import { GlassMaterial } from '../glass/glass-material.js';
 import type { GlassPhysicalNodeMaterial } from '../glass/glass-material-core.js';
 import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { packageSpring } from '../package-spring.js';
+import { useEntityVisible } from '../use-entity-visible.js';
 import { PackageDownloads } from './package-downloads.js';
 import { PackageFeatures } from './package-features.js';
 import { PackageMaintainers } from './package-maintainer-renderer.js';
 
-const { ActiveScreen, Hidden, Package, PackageSizing, Ref, Screen, Size, Time, Timeline } = traits;
+const { ActiveScreen, Package, PackageSizing, Ref, Screen, Size, Time, Timeline } = traits;
 
 useMSDF.preload(fonts.mono);
 
@@ -52,7 +53,7 @@ export function PackageRenderer() {
   const timing = useTrait(timeline, Timeline);
   const group = useRef<Group>(null);
   const departure = useRef({ value: 0, from: 0, target: 0, delay: 0, duration: 0, visible: false });
-  const leavingDown = !!data?.codeComparisonVisible || !!data?.warpVisible;
+  const leavingDown = !!data?.codeComparisonVisible || !!data?.warpVisible || !!data?.teamVisible;
   const exitDuration = leavingDown
     ? Math.min(data?.warpVisible ? 0.65 : 0.9, timing?.duration ?? 0)
     : undefined;
@@ -90,7 +91,11 @@ export function PackageRenderer() {
         motion.target,
         motion.target === 1 ? easing.cubicIn(progress) : easing.cubicOut(progress)
       );
-      const { height } = state.viewport.getCurrentViewport(state.camera, [0, 0, 0]);
+      const { height } = state.viewport.getCurrentViewport(state.camera, [
+        0,
+        0,
+        data?.teamVisible ? -12.5 : 0,
+      ]);
       group.current.position.y = -height * 1.5 * motion.value;
     },
     { priority: -0.5 }
@@ -104,8 +109,8 @@ export function PackageRenderer() {
             key={entity}
             entity={entity}
             timeline={timeline}
-            solid={data?.background === 'solid'}
             showDownloads={data?.packageDownloadsVisible ?? false}
+            showRate
             showFeatures={data?.packageFeaturesVisible ?? false}
             showMaintainers={data?.packageMaintainersVisible ?? false}
             exitDuration={exitDuration}
@@ -119,16 +124,16 @@ export function PackageRenderer() {
 function PackageView({
   entity,
   timeline,
-  solid,
   showDownloads,
+  showRate,
   showFeatures,
   showMaintainers,
   exitDuration,
 }: {
   entity: Entity;
   timeline: Entity | undefined;
-  solid: boolean;
   showDownloads: boolean;
+  showRate: boolean;
   showFeatures: boolean;
   showMaintainers: boolean;
   exitDuration: number | undefined;
@@ -139,7 +144,7 @@ function PackageView({
   const { name, label: displayLabel, index } = useTrait(entity, Package)!;
   const nameLabel = displayLabel || name;
   const { compressed: radius } = useTrait(entity, PackageSizing)!;
-  const visible = !useHas(entity, Hidden);
+  const visible = useEntityVisible(entity);
   const [present, setPresent] = useState(visible);
   const progress = useRef(visible ? 1 : 0);
   const transition = useRef({
@@ -149,6 +154,7 @@ function PackageView({
     delay: 0,
     duration: 0,
     spring: false,
+    community: false,
   });
   const groupRef = useRef<Group>(null);
   const meshRef = useRef<Mesh<BufferGeometry, GlassPhysicalNodeMaterial>>(null);
@@ -194,8 +200,11 @@ function PackageView({
       duration: returning
         ? 0
         : (exitDuration ??
-          (screen?.packageDuration || duration - delay - Math.max(0, count - 1) * stagger)),
-      spring: visible && screen?.packageLayout === 'pair',
+          (!visible && transition.current.community
+            ? 0.3
+            : screen?.packageDuration || duration - delay - Math.max(0, count - 1) * stagger)),
+      spring: visible && (screen?.packageLayout === 'pair' || screen?.packageLayout === 'community'),
+      community: visible ? screen?.packageLayout === 'community' : transition.current.community,
     };
   }, [visible, timing, timeline, world, name, index, exitDuration]);
 
@@ -255,7 +264,6 @@ function PackageView({
             samples={4}
             backside
             backsideThickness={radius * 2}
-            background={solid ? brand.green : theme.background}
           />
         </mesh>
         <group
@@ -301,6 +309,7 @@ function PackageView({
         timeline={timeline}
         radius={radius}
         visible={showDownloads && visible}
+        showRate={showRate}
         exitDuration={exitDuration}
       />
       {name === 'three' && (

@@ -1,16 +1,10 @@
 import { createActions } from 'koota';
 import { clamp } from 'math';
-import { principles } from '../data/principles.js';
 import { initiatives } from '../data/initiatives.js';
 import {
   Anchor,
   Camera,
   Charter,
-  ConnectedTo,
-  Constellation,
-  ConstellationExpansion,
-  ConstellationLayout,
-  ConstellationMember,
   Float,
   Hidden,
   Initiative,
@@ -18,13 +12,11 @@ import {
   Package,
   PackageSizing,
   Position,
-  Principle,
   Profile,
   ProfileFocus,
   Rotation,
   Size,
   SizeTransition,
-  Star,
   TargetPosition,
   Title,
   TransitionOrigin,
@@ -59,51 +51,6 @@ export const actions = createActions((world) => ({
 
   createCharter: () => world.spawn(Charter, Hidden, Position({ z: -11 })),
 
-  createPrinciplesConstellation: () => {
-    const constellation = world.spawn(
-      Constellation({ id: 'principles', title: 'Principles' }),
-      ConstellationExpansion,
-      Hidden,
-      Position({ x: 100, y: 10, z: -120 }),
-      Anchor({ x: 100, y: 10, z: -120 }),
-      Rotation,
-      Float({ amplitude: 0.55, speed: 0.15, phase: 0.8, tilt: 0 })
-    );
-    const stars = principles.map(
-      ({ id, title, description, color, brightness, position, mapPosition }, index) =>
-        world.spawn(
-          Principle({ id, title, description }),
-          Star({
-            color,
-            brightness,
-            twinklePhase: index * 23.47,
-            twinkleSpeed: (0.75 + (index % 3) * 0.19) / 5,
-            streakLength: 0.8 + (index % 3) * 0.2,
-          }),
-          ConstellationMember(constellation),
-          ConstellationLayout({
-            compactX: position.x,
-            compactY: position.y,
-            compactZ: position.z,
-            mapX: mapPosition.x,
-            mapY: mapPosition.y,
-            mapZ: mapPosition.z,
-          }),
-          Hidden,
-          Position(position),
-          Anchor(position),
-          Rotation,
-          Float({ amplitude: 0.35, speed: 0.18, phase: index * 2.4, tilt: 0 })
-        )
-    );
-    for (const [index, principle] of principles.entries()) {
-      for (const target of principle.connections) {
-        stars[index].add(ConnectedTo(stars.find((star) => star.get(Principle)!.id === target)!));
-      }
-    }
-    return constellation;
-  },
-
   createCamera: () =>
     world.spawn(
       Camera,
@@ -135,6 +82,7 @@ export const actions = createActions((world) => ({
       Hidden,
       Size({ radius: 0.55 + (index % 4) * 0.07 }),
       Position,
+      TransitionOrigin,
       Rotation,
       // Separate depth layers leave room for the float orbit and tilted portrait edges
       Anchor({ z: -13 - depthIndex * 0.45 }),

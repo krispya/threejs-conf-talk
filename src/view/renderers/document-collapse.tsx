@@ -53,17 +53,19 @@ type N = any;
 const ramp = (t: number, from: number, to: number) => clamp((t - from) / (to - from), 0, 1);
 
 /**
- * The charter is captured once as a printed sheet, then crumples, tears into shards that
+ * The framed document is captured once as a printed surface, then crumples, tears into shards that
  * spiral into a black hole, and pops. Every beat is timed in seconds from the transition start.
  */
-export function CharterCollapse({
+export function DocumentCollapse({
   sheet,
-  active,
   progress,
+  width,
+  height,
 }: {
   sheet: RefObject<Group | null>;
-  active: RefObject<boolean>;
   progress: ReturnType<typeof useTransitionOpacity>;
+  width: number;
+  height: number;
 }) {
   const world = useWorld();
   const renderer = useThree((state) => state.renderer);
@@ -78,9 +80,11 @@ export function CharterCollapse({
   const baseFov = useRef(0);
   const [resources] = useState(() => {
     // These are CPU descriptors until the committed frame captures the sheet.
-    const target = new RenderTarget(1600, 1200, { type: HalfFloatType });
-    target.texture.name = 'CharterPrintedSheet';
-    const camera = new OrthographicCamera(-20.2, 20.2, 15.15, -15.15, 0.1, 200);
+    const target = new RenderTarget(1600, Math.round((1600 * height) / width), {
+      type: HalfFloatType,
+    });
+    target.texture.name = 'FramedAnnouncement';
+    const camera = new OrthographicCamera(-width / 2, width / 2, height / 2, -height / 2, 0.1, 200);
     return {
       target,
       camera,
@@ -116,14 +120,15 @@ export function CharterCollapse({
   }, [resources]);
   // Compile the collapse effects and the sheet capture ahead of the transition that shows them
   useEffect(() => {
-    if (group.current) warmUp(renderer, group.current, camera, scene);
-    if (sheet.current) warmUp(renderer, sheet.current, resources.camera, undefined, resources.target);
+    if (group.current) void warmUp(renderer, group.current, camera, scene);
+    if (sheet.current)
+      void warmUp(renderer, sheet.current, resources.camera, undefined, resources.target);
   }, [renderer, camera, scene, resources, sheet]);
 
   // Unshared triangles let the sheet tear. Each carries its centroid and a tear order that
   // favors the middle, so the shards nearest the hole go first.
   const geometry = useMemo(() => {
-    const plane = new PlaneGeometry(40.4, 30.3, 48, 36).toNonIndexed();
+    const plane = new PlaneGeometry(width, height, 48, 48).toNonIndexed();
     const positions = plane.attributes.position;
     const piece = new Float32Array(positions.count * 3);
     for (let i = 0; i < positions.count; i += 3) {
@@ -132,12 +137,13 @@ export function CharterCollapse({
       const noise = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
       // Orders stay below 0.9 so the corners are gone before the hole snaps shut
       const order =
-        (Math.hypot(x / 20.2, y / 15.15) / Math.SQRT2) * 0.6 + (noise - Math.floor(noise)) * 0.3;
+        (Math.hypot((x * 2) / width, (y * 2) / height) / Math.SQRT2) * 0.6 +
+        (noise - Math.floor(noise)) * 0.3;
       for (let vertex = i; vertex < i + 3; vertex++) piece.set([x, y, order], vertex * 3);
     }
     plane.setAttribute('piece', new BufferAttribute(piece, 3));
     return plane;
-  }, []);
+  }, [width, height]);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   const nodes = useMemo(() => {
@@ -145,7 +151,7 @@ export function CharterCollapse({
 
     // Crumple: a twist and wrinkles that tighten toward the middle, after a bow of anticipation
     const crumple = (p: N): N => {
-      const distance = p.xy.div(vec2(20, 15)).length();
+      const distance = p.xy.div(vec2(width / 2, height / 2)).length();
       const twist = u.fold.mul(distance.mul(0.5).add(0.4));
       const x = p.x
         .mul(twist.cos())
@@ -267,7 +273,7 @@ export function CharterCollapse({
       warpColor: trails.mul(mix(vec3(1), vec3(0.9, 0.97, 1.2), u.warp.mul(4).clamp())),
       warpOpacity: u.warp.mul(25).clamp(),
     };
-  }, [resources, u]);
+  }, [resources, u, width, height]);
 
   // TSL uniforms carry mutable render state outside React
   /* oxlint-disable react/immutability */
@@ -285,11 +291,11 @@ export function CharterCollapse({
       };
       const timeline = world.queryFirst(Timeline);
       const screen = timeline?.targetFor(ActiveScreen);
-      const exitingCharter =
-        !screen?.get(Screen)?.charterVisible &&
-        !!screen?.targetFor(PreviousScreen)?.get(Screen)?.charterVisible;
+      const exitingAnnouncement =
+        !screen?.get(Screen)?.announcementVisible &&
+        !!screen?.targetFor(PreviousScreen)?.get(Screen)?.announcementVisible;
       // Read the active screen directly so auto-advance cannot replay the collapsed sheet
-      if (!active.current || !exitingCharter) {
+      if (!exitingAnnouncement) {
         captured.current = false;
         view.visible = false;
         if (remnant.current) remnant.current.visible = false;
@@ -315,10 +321,10 @@ export function CharterCollapse({
         paper.getWorldQuaternion(resources.camera.quaternion);
         paper.getWorldScale(resources.scale);
         // Frame the printed sheet at its world scale before the collapse
-        resources.camera.left = -20.2 * resources.scale.x;
-        resources.camera.right = 20.2 * resources.scale.x;
-        resources.camera.top = 15.15 * resources.scale.y;
-        resources.camera.bottom = -15.15 * resources.scale.y;
+        resources.camera.left = (-width / 2) * resources.scale.x;
+        resources.camera.right = (width / 2) * resources.scale.x;
+        resources.camera.top = (height / 2) * resources.scale.y;
+        resources.camera.bottom = -(height / 2) * resources.scale.y;
         resources.camera.translateZ(80 * resources.scale.z);
         resources.camera.updateProjectionMatrix();
         resources.camera.updateMatrixWorld();
@@ -446,8 +452,8 @@ export function CharterCollapse({
   /* oxlint-enable react/immutability */
 
   return (
-    <group ref={group} name="charter-collapse" visible={false}>
-      <mesh ref={warpMesh} name="charter-warp" renderOrder={20} frustumCulled={false}>
+    <group ref={group} name="announcement-collapse" visible={false}>
+      <mesh ref={warpMesh} name="announcement-warp" renderOrder={20} frustumCulled={false}>
         <planeGeometry args={[1, 1]} />
         <meshBasicNodeMaterial
           vertexNode={vec4(positionLocal.xy.mul(2), 0, 1)}
@@ -459,10 +465,10 @@ export function CharterCollapse({
           toneMapped={false}
         />
       </mesh>
-      <group ref={remnant} name="charter-remnant">
+      <group ref={remnant} name="announcement-remnant">
         <mesh
           ref={paperMesh}
-          name="charter-crumpled-paper"
+          name="announcement-crumpled-paper"
           geometry={geometry}
           renderOrder={4}
           frustumCulled={false}
@@ -479,7 +485,7 @@ export function CharterCollapse({
           />
         </mesh>
         <mesh
-          name="charter-black-hole-lens"
+          name="announcement-black-hole-lens"
           position={[0, 0, 7.5]}
           renderOrder={7}
           frustumCulled={false}
@@ -495,7 +501,7 @@ export function CharterCollapse({
             toneMapped={false}
           />
         </mesh>
-        <group ref={hole} name="charter-black-hole" position={[0, 0, 7]}>
+        <group ref={hole} name="announcement-black-hole" position={[0, 0, 7]}>
           <mesh renderOrder={8}>
             <planeGeometry args={[18, 18]} />
             <meshBasicNodeMaterial
@@ -518,7 +524,7 @@ export function CharterCollapse({
             />
           </mesh>
         </group>
-        <mesh name="charter-black-hole-shock" position={[0, 0, 7.2]} renderOrder={10}>
+        <mesh name="announcement-black-hole-shock" position={[0, 0, 7.2]} renderOrder={10}>
           <planeGeometry args={[70, 70]} />
           <meshBasicNodeMaterial
             colorNode={nodes.shock}

@@ -1,16 +1,19 @@
 import { Not, type World } from 'koota';
 import {
   Anchor,
+  ActiveScreen,
   Camera,
   Float,
   Hidden,
   Letter,
+  Package,
   Position,
   Profile,
   Rotation,
   Screen,
   ScreenTransition,
   Time,
+  Timeline,
 } from '../traits/index.js';
 
 /** Drifts each body around its anchor on a slow, slightly lopsided orbit with a gentle tilt. */
@@ -18,6 +21,8 @@ export function floatBodies(world: World) {
   const { elapsed } = world.get(Time)!;
   const camera = world.queryFirst(Camera, Position)?.get(Position);
   const screens = world.query(Screen, ScreenTransition);
+  const pinPackage =
+    world.queryFirst(Timeline)?.targetFor(ActiveScreen)?.get(Screen)?.packageLayout === 'community';
   const letterCameraZ = screens
     .find((entity) => entity.get(Screen)!.lettersVisible)
     ?.get(ScreenTransition)?.cameraZ;
@@ -28,6 +33,13 @@ export function floatBodies(world: World) {
   world
     .query(Position, Rotation, Anchor, Float, Not(Hidden))
     .updateEach(([position, rotation, anchor, float], entity) => {
+      if (pinPackage && entity.has(Package)) {
+        position.x = anchor.x;
+        position.y = anchor.y;
+        position.z = anchor.z;
+        rotation.x = rotation.y = rotation.z = 0;
+        return;
+      }
       const t = elapsed * float.speed + float.phase;
       const referenceZ = entity.has(Letter)
         ? letterCameraZ

@@ -2,10 +2,12 @@ export * from './traits/index.js';
 export { world } from './world.js';
 export { actions, compressedRadiusForDownloads, radiusForDownloads } from './actions.js';
 export { screens, type ScreenId } from './screens.js';
+export { communityDepartureTime } from './community-departure.js';
 export {
   advanceTimeline,
   getCameraProgress,
   getRevealProgress,
+  getRevealTime,
   getTransitionProgress,
   timelineActions,
 } from './timeline.js';

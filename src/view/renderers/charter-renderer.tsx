@@ -3,28 +3,19 @@ import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useHas, useQuery, useQueryFirst, useTarget } from 'koota/react';
+import { useQuery, useQueryFirst, useTarget, useTrait } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { color, normalView, smoothstep, uv } from 'three/tsl';
 import type { Group, Node } from 'three/webgpu';
 import { charter } from '../../data/charter.js';
-import {
-  ActiveScreen,
-  Charter,
-  Hidden,
-  Position,
-  PreviousScreen,
-  Ref,
-  Screen,
-  Timeline,
-} from '../../sim/index.js';
+import { ActiveScreen, Charter, Hidden, Position, Ref, Screen, Timeline } from '../../sim/index.js';
 import { brand, fonts, ramp } from '../../theme.js';
+import { useEntityVisible } from '../use-entity-visible.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { CharterDateStamp } from './charter-date-stamp.js';
 import { CharterMarker } from './charter-marker.js';
-import { CharterCollapse } from './charter-collapse.js';
 
 useMSDF.preload(fonts.sans);
 useMSDF.preload(fonts.mono);
@@ -37,18 +28,21 @@ export function CharterRenderer() {
 function CharterView({ entity }: { entity: Entity }) {
   const sans = useMSDF(fonts.sans);
   const mono = useMSDF(fonts.mono);
-  const visible = !useHas(entity, Hidden);
+  const visible = useEntityVisible(entity);
   const timeline = useQueryFirst(Timeline);
   const screen = useTarget(timeline, ActiveScreen);
-  const forwardExit = !!screen?.targetFor(PreviousScreen)?.get(Screen)?.charterVisible;
-  const progress = useTransitionOpacity(visible, { restartOnChange: forwardExit });
+  const focus = useTransitionOpacity(useTrait(screen, Screen)?.charterFocus ?? false, {
+    duration: 2.2,
+    ease: easing.cubicInOut,
+  });
+  const progress = useTransitionOpacity(visible, { duration: visible ? undefined : 1 });
+  const departure = useTransitionOpacity(useTrait(screen, Screen)?.announcementVisible ?? false, {
+    duration: 1,
+    ease: easing.cubicInOut,
+  });
   const sheet = useRef<Group>(null);
   const upperFold = useRef<Group>(null);
   const lowerFold = useRef<Group>(null);
-  const collapsing = useRef(false);
-  useLayoutEffect(() => {
-    collapsing.current = !visible && forwardExit && progress.value > 0;
-  }, [visible, forwardExit, progress]);
   const canvas = useThree((state) => state.renderer.domElement);
   const previousCursor = useRef<string | null>(null);
   const resetCursor = useCallback(() => {
@@ -85,18 +79,24 @@ function CharterView({ entity }: { entity: Entity }) {
   );
 
   useFrame(
-    () => {
+    (state) => {
       const group = entity.get(Ref);
       if (!group) return;
       group.visible = progress.value > 0;
       if (!group.visible || !sheet.current || !upperFold.current || !lowerFold.current) return;
 
-      sheet.current.visible = !collapsing.current;
-      if (collapsing.current) return;
-
-      const reveal = progress.value;
+      const reveal = focus.value > 0 ? 1 : progress.value;
       const slide = easing.cubicOut(clamp(reveal / 0.5, 0, 1));
-      sheet.current.position.set(lerp(3, 0, slide), lerp(60, 0, slide), 0);
+      const { height } = state.viewport.getCurrentViewport(state.camera, group.position);
+      // Slide the sheet until the initiatives heading at local y -5.1 reaches the top edge.
+      sheet.current.position.set(
+        lerp(3, 0, slide),
+        lerp(60, 0, slide) +
+          ((state.camera.position.y + height / 2 - 0.2 - group.position.y) / group.scale.y + 5.1) *
+            focus.value +
+          departure.value * 35,
+        0
+      );
       sheet.current.rotation.set(lerp(-0.12, 0, slide), lerp(-0.08, 0, slide), lerp(0.05, 0, slide));
       lowerFold.current.rotation.x = lerp(
         -2.97,
@@ -114,7 +114,6 @@ function CharterView({ entity }: { entity: Entity }) {
 
   return (
     <group ref={handleInit} name="charter" scale={0.13} visible={false}>
-      <CharterCollapse sheet={sheet} active={collapsing} progress={progress} />
       <group ref={sheet} name="charter-sheet">
         <PaperPanel opacity={opacity}>
           <CharterDateStamp opacity={opacity} />
@@ -180,11 +179,18 @@ function CharterView({ entity }: { entity: Entity }) {
             <PaperPanel opacity={opacity}>
               <CharterMarker opacity={opacity} />
               <TextGroup material={material} renderOrder={6}>
-                {charter.sections.slice(5).map((heading, index) => (
+                <Text
+                  font={sans}
+                  position={[-17.8, 4.9, 0.1]}
+                  style={{ fontSize: 1.2, lineHeight: 1 }}
+                >
+                  {charter.sections[5]}
+                </Text>
+                {charter.sections.slice(6).map((heading, index) => (
                   <Text
                     key={heading}
                     font={sans}
-                    position={[-17.8, 4.9 - index * 2.4, 0.1]}
+                    position={[-17.8, 2.5 - index * 2.4, 0.1]}
                     style={{ fontSize: 1.2, lineHeight: 1 }}
                   >
                     {heading}

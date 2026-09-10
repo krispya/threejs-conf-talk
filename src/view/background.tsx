@@ -21,10 +21,11 @@ import {
   vec2,
   vec4,
 } from 'three/tsl';
-import { Color, NoToneMapping } from 'three/webgpu';
+import { NoToneMapping } from 'three/webgpu';
 import { ActiveScreen, Screen, Timeline } from '../sim/index.js';
 import { backdrop, brand } from '../theme.js';
 import { useTransitionOpacity } from './use-transition-opacity.js';
+import { useShowreel } from './use-showreel.js';
 import { bakeNebula, starfieldNode } from './starfield.js';
 import { usePortal } from './use-portal.js';
 import { usePortalRipples } from './use-portal-ripples.js';
@@ -203,8 +204,10 @@ export function Background() {
   const data = useTrait(screen, Screen);
   const { progress: portalProgress, angle, distance, energy, edge, aperture } = usePortal();
   const solid = !data || data.background === 'solid';
+  const closing = data?.background === 'blue';
   const opacity = useTransitionOpacity(data?.backgroundVisible ?? true);
   const stars = useTransitionOpacity(data?.background === 'stars', { delayed: true });
+  const reel = useShowreel();
   const background = useMemo(
     () =>
       Fn(() => {
@@ -254,22 +257,41 @@ export function Background() {
     [background, portalProgress, angle, distance, energy, edge, aperture]
   );
 
+  const composed = useMemo(
+    () =>
+      Fn(() => {
+        const base = vec4(
+          data?.warpVisible
+            ? portal
+            : closing
+              ? color(brand.blue)
+              : solid
+                ? color(brand.green)
+                : background
+        ).toVar();
+        If(reel.opacity.greaterThan(0), () => {
+          const video = reel.source.node.rgb.mul(reel.blackout.oneMinus());
+          base.assign(mix(base, vec4(video, 1), reel.opacity));
+        });
+        return base;
+      })(),
+    [data?.warpVisible, portal, closing, solid, background, reel]
+  );
+
   /* oxlint-disable react/immutability */
   useLayoutEffect(() => {
-    // Switch backgrounds before the next frame updates the portal uniforms
-    // Pastels get compressed by filmic tone mapping, so output the colors as authored
     const prevToneMapping = renderer.toneMapping;
     const prevBackground = scene.background;
     const prevBackgroundNode = scene.backgroundNode;
     renderer.toneMapping = NoToneMapping;
-    scene.background = new Color(brand.green);
-    scene.backgroundNode = data?.warpVisible ? portal : solid ? null : background;
+    scene.background = null;
+    scene.backgroundNode = composed;
     return () => {
       scene.background = prevBackground;
       scene.backgroundNode = prevBackgroundNode;
       renderer.toneMapping = prevToneMapping;
     };
-  }, [scene, renderer, background, solid, data?.warpVisible, portal]);
+  }, [scene, renderer, composed]);
   /* oxlint-enable react/immutability */
 
   return null;

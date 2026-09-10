@@ -1,9 +1,10 @@
-import { extend, useFrame } from '@react-three/fiber/webgpu';
+import { extend } from '@react-three/fiber/webgpu';
 import { useLayoutEffect, useRef } from 'react';
 import { FrontSide } from 'three/webgpu';
 import type { Side } from 'three/webgpu';
 import { GlassPhysicalNodeMaterial } from './glass-material-core.js';
 import { useTransmissionBackdrop } from './transmission-backdrop-provider.js';
+import { registerTransmissionMaterial } from './transmission-backdrop.js';
 
 const GlassMaterialElement = extend(GlassPhysicalNodeMaterial);
 
@@ -29,10 +30,6 @@ export interface GlassMaterialProps {
   samples?: number;
   backside?: boolean;
   backsideThickness?: number;
-  backdropResolutionScale?: number;
-  backsideResolutionScale?: number;
-  /** Fill color while capturing the backdrop. */
-  background?: string;
   side?: Side;
 }
 
@@ -60,9 +57,6 @@ export function GlassMaterial({
   samples = 6,
   backside = true,
   backsideThickness = 0.35,
-  backdropResolutionScale = 0.85,
-  backsideResolutionScale = 0.7,
-  background = '#161616',
   side = FrontSide,
 }: GlassMaterialProps) {
   const backdrop = useTransmissionBackdrop();
@@ -98,30 +92,17 @@ export function GlassMaterial({
     material.transmissionBackdropConfig = {
       backside,
       backsideThickness,
-      thickness,
-      backdropResolutionScale,
-      backsideResolutionScale,
-      background,
     };
   });
 
   useLayoutEffect(() => {
     const material = materialRef.current;
     if (!enabled || !material) return;
-    backdrop.register(material);
-    return () => backdrop.unregister(material);
+    registerTransmissionMaterial(backdrop, material);
+    return () => {
+      backdrop.materials.delete(material);
+    };
   }, [backdrop, enabled, samples]);
-
-  // Capture after the sim has synced transforms (priority 0) but before the render phase
-  useFrame(
-    (state, delta) => {
-      const material = materialRef.current;
-      if (!material) return;
-      material.transmissionUniforms.time.value += delta;
-      backdrop.capture(state.renderer, state.scene, state.camera, state.frame);
-    },
-    { priority: -1, enabled }
-  );
 
   return (
     <GlassMaterialElement

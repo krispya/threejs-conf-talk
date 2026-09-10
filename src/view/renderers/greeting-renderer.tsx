@@ -35,26 +35,40 @@ export function GreetingRenderer({
   const data = useTrait(screen, Screen);
   const timing = useTrait(timeline, Timeline);
   const visible = data?.greetingVisible ?? false;
+  const work = data?.id === 'work';
+  const arrivedAt = useRef(0);
+  useEffect(() => {
+    if (visible) arrivedAt.current = world.get(Time)!.elapsed;
+  }, [visible, world]);
   const entrance = useTransitionOpacity(visible, {
     duration: 1.25,
     delay: visible ? 0.15 : 0,
     ease: visible ? easing.cubicOut : easing.cubicInOut,
   });
-  const caption = useTransitionOpacity(visible, {
-    duration: visible ? 0.7 : 1.1,
-    delay: visible ? 0.75 : 0,
+  const caption = useTransitionOpacity(visible && !work, {
+    duration: work ? 0.35 : visible ? 0.7 : 1.1,
+    delay: visible && !work ? 0.75 : 0,
     ease: visible ? easing.cubicOut : easing.cubicInOut,
   });
-  const greeting = useTransitionOpacity(visible, {
-    duration: visible ? 0.6 : 1,
-    delay: visible ? 1.35 : 0,
+  const greeting = useTransitionOpacity(visible && !work, {
+    duration: work ? 0.3 : visible ? 0.6 : 1,
+    delay: visible && !work ? 1.35 : 0,
     ease: visible ? easing.cubicOut : easing.cubicInOut,
+  });
+  const question = useTransitionOpacity(work, {
+    duration: work ? 0.65 : 0.3,
+    delay: work ? 0.3 : 0,
   });
   const root = useRef<Group>(null);
   const character = useRef<Group>(null);
   const words = useRef<Group>(null);
   const bubble = useRef<Group>(null);
   const hand = useRef<Group>(null);
+  const questionWords = useRef<Group>(null);
+  const thinkingBubble = useRef<Group>(null);
+  const gearBubble = useRef<Group>(null);
+  const thinking = useRef<Group>(null);
+  const gear = useRef<Group>(null);
   const model = useMemo(() => {
     const geometry = (gltf.scene.getObjectByName('logo') as Mesh).geometry.clone();
     geometry.center();
@@ -67,6 +81,19 @@ export function GreetingRenderer({
       model.edges.dispose();
     },
     [model]
+  );
+
+  const questionMaterial = useMemo(
+    () =>
+      defineTextMaterial((context) => {
+        const material = context.createDefaultMaterial();
+        material.colorNode = color(brand.dark);
+        material.opacityNode =
+          (material.opacityNode as Node<'float'> | null)?.mul(question) ?? question;
+        material.depthWrite = false;
+        return material;
+      }),
+    [question]
   );
   const textMaterial = useMemo(
     () =>
@@ -89,7 +116,8 @@ export function GreetingRenderer({
     (state) => {
       if (!root.current || !character.current || !words.current || !bubble.current || !hand.current)
         return;
-      root.current.visible = entrance.value > 0 || caption.value > 0 || greeting.value > 0;
+      root.current.visible =
+        entrance.value > 0 || caption.value > 0 || greeting.value > 0 || question.value > 0;
       if (!root.current.visible) return;
 
       const { width, height } = state.viewport.getCurrentViewport(camera, [0, 0, -11]);
@@ -97,7 +125,9 @@ export function GreetingRenderer({
       root.current.scale.setScalar(scale);
       const now = world.get(Time)!.elapsed;
       const elapsed = now - (timing?.startedAt ?? now);
-      const arrival = visible ? packageSpring(clamp((elapsed - 0.15) / 1.25, 0, 1)) : entrance.value;
+      const arrival = visible
+        ? packageSpring(clamp((now - arrivedAt.current - 0.15) / 1.25, 0, 1))
+        : entrance.value;
       character.current.position.set(
         lerp(-width / (2 * scale) - 2, -2.2, arrival),
         Math.sin(clamp(arrival, 0, 1) * Math.PI) * 0.65 + Math.sin(now * 0.8) * 0.055,
@@ -112,13 +142,32 @@ export function GreetingRenderer({
       words.current.position.y = lerp(-0.18, 0, caption.value);
       words.current.visible = caption.value > 0;
 
-      const pop = visible ? packageSpring(clamp((elapsed - 1.35) / 0.6, 0, 1)) : greeting.value;
+      const pop =
+        visible && !work ? packageSpring(clamp((elapsed - 1.35) / 0.6, 0, 1)) : greeting.value;
       bubble.current.visible = greeting.value > 0;
       bubble.current.scale.setScalar(Math.max(0.001, pop));
       bubble.current.position.y = 1.28 + Math.sin(now * 0.9) * 0.04;
       bubble.current.rotation.z = lerp(-0.24, 0.06, pop);
       const wave = clamp((elapsed - 1.5) / 1.8, 0, 1);
       hand.current.rotation.z = Math.sin(wave * Math.PI * 8) * Math.sin(wave * Math.PI) * 0.25;
+
+      if (questionWords.current) {
+        questionWords.current.visible = question.value > 0;
+        questionWords.current.position.y = lerp(-0.16, 0, question.value);
+      }
+      if (thinkingBubble.current && gearBubble.current && thinking.current && gear.current) {
+        thinkingBubble.current.visible = gearBubble.current.visible = question.value > 0;
+        const thinkingPop = work
+          ? packageSpring(clamp((elapsed - 0.4) / 0.65, 0, 1))
+          : question.value;
+        const gearPop = work ? packageSpring(clamp((elapsed - 0.6) / 0.65, 0, 1)) : question.value;
+        thinkingBubble.current.scale.setScalar(Math.max(0.001, thinkingPop));
+        gearBubble.current.scale.setScalar(Math.max(0.001, gearPop) * 0.7);
+        thinkingBubble.current.position.y = 1.28 + Math.sin(now * 1.2) * 0.06;
+        gearBubble.current.position.y = 1.5 + Math.sin(now * 1.2 + 1.4) * 0.08;
+        thinking.current.rotation.z = Math.sin(now * 1.6) * 0.12;
+        gear.current.rotation.z = -now * 0.65;
+      }
     },
     { priority: -0.6 }
   );
@@ -151,6 +200,27 @@ export function GreetingRenderer({
       </group>
       <group ref={bubble} name="hello-speech-bubble" position={[-0.1, 1.28, 0.65]}>
         <WaveBubble opacity={greeting} handRef={hand} />
+      </group>
+      <group ref={questionWords} name="how-work-gets-done" visible={false}>
+        <TextGroup material={questionMaterial}>
+          <Text font={mono} position={[-0.35, 0.55, 0]} style={{ fontSize: 0.28, lineHeight: 1 }}>
+            How does the
+          </Text>
+          <Text font={sans} position={[-0.39, 0.1, 0]} style={{ fontSize: 0.56, lineHeight: 1 }}>
+            work get done?
+          </Text>
+        </TextGroup>
+      </group>
+      <group
+        ref={thinkingBubble}
+        name="thinking-speech-bubble"
+        position={[-0.1, 1.28, 0.65]}
+        visible={false}
+      >
+        <WaveBubble opacity={question} handRef={thinking} emoji="🤔" />
+      </group>
+      <group ref={gearBubble} name="gear-speech-bubble" position={[1.05, 1.5, 0.65]} visible={false}>
+        <WaveBubble opacity={question} handRef={gear} emoji="⚙️" />
       </group>
     </group>
   );

@@ -20,6 +20,10 @@ export const profiles = [
   { login: 'DennisSmolek', avatar: './profiles/DennisSmolek.jpg' },
   { login: 'kvvasuu', avatar: './profiles/kvvasuu.jpg' },
   { login: 'wiledal', avatar: './profiles/wiledal.jpg' },
+  { login: 'stephencorwin', avatar: './profiles/stephencorwin.jpg' },
+  { login: 'AlaricBaraou', avatar: './profiles/AlaricBaraou.jpg' },
+  { login: 'castavridis', avatar: './profiles/castavridis.jpg' },
+  { login: 'itsdouges', avatar: './profiles/itsdouges.jpg' },
 ] as const;
 
 /** Profiles available for package credits, including projects outside pmndrs. */
@@ -29,3 +33,20 @@ export const allProfiles = [
 ] as const;
 
 export type ProfileLogin = (typeof allProfiles)[number]['login'];
+
+/** The same roster stays together through the team, principles, and charter story. */
+export const currentTeam = [
+  'DennisSmolek',
+  'gsimone',
+  'dai-shi',
+  'abernier',
+  'bbohlender',
+  'krispya',
+  'kvvasuu',
+  'isaac-mason',
+  'ospira',
+  'FarazzShaikh',
+  'vanruesc',
+  'castavridis',
+  'itsdouges',
+] as const satisfies readonly ProfileLogin[];

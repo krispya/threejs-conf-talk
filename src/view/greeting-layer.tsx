@@ -1,16 +1,20 @@
-import { createPortal, useFrame, useThree } from '@react-three/fiber/webgpu';
+import { createPortal, useFrame, useThree, type ThreeCamera } from '@react-three/fiber/webgpu';
 import { useQueryFirst, useTarget, useTrait } from 'koota/react';
 import { easing } from 'math/time';
 import { Suspense, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
-import { color, mix, pass, uniform, vec4 } from 'three/tsl';
+import { color, mix, pass, screenUV, uniform, vec4 } from 'three/tsl';
 import { RenderPipeline, Scene, type Group } from 'three/webgpu';
-import { ActiveScreen, Screen, Timeline } from '../sim/index.js';
+import { ActiveScreen, Screen, ScreenTransition, Timeline } from '../sim/index.js';
 import { ramp } from '../theme.js';
+import { CharterRenderer } from './renderers/charter-renderer.js';
+import { AnnouncementRenderer } from './renderers/announcement-renderer.js';
 import { GreetingRenderer } from './renderers/greeting-renderer.js';
+import { HistoryRenderer } from './renderers/history-renderer.js';
+import { PrinciplesRenderer } from './renderers/principles-renderer.js';
 import { useTransitionOpacity } from './use-transition-opacity.js';
 
-/** Blur the existing scene before drawing the greeting in the foreground. */
+/** Composite foreground screens over the scene, with a soft focus for the greeting. */
 export function GreetingLayer() {
   const renderer = useThree((state) => state.renderer);
   const scene = useThree((state) => state.scene);
@@ -19,18 +23,30 @@ export function GreetingLayer() {
   const screen = useTarget(timeline, ActiveScreen);
   const data = useTrait(screen, Screen);
   const greeting = data?.greetingVisible ?? false;
-  const amount = useTransitionOpacity(greeting, {
-    duration: greeting ? 1.1 : 1.3,
-    ease: greeting ? easing.cubicOut : easing.cubicInOut,
+  const history = (data?.historyPages ?? 0) > 0;
+  const principles = data?.principlesVisible ?? false;
+  const charter = useTransitionOpacity(data?.charterVisible ?? false);
+  const announcement = useTransitionOpacity(data?.announcementVisible ?? false);
+  const panelVisible = principles || (data?.charterVisible ?? false);
+  const transition = useTrait(screen, ScreenTransition);
+  const panel = useTransitionOpacity(panelVisible, {
+    duration: panelVisible ? Math.max(0.1, (transition?.revealDelay ?? 1.75) - 0.15) : 1.1,
+    ease: easing.cubicInOut,
+  });
+  const amount = useTransitionOpacity(greeting || history, {
+    duration: greeting || history ? 1.1 : 1.3,
+    ease: greeting || history ? easing.cubicOut : easing.cubicInOut,
   });
   const [foreground] = useState(() => new Scene());
   const effect = useMemo(() => {
     const scenePass = pass(scene, camera);
     const foregroundPass = pass(foreground, camera);
     const radius = uniform(0);
-    const blurred = gaussianBlur(scenePass.getTextureNode(), radius, 8);
+    // Explicit screen coordinates prevent the background sphere from supplying its own UVs.
+    const sceneTexture = scenePass.getTextureNode().sample(screenUV);
+    const blurred = gaussianBlur(sceneTexture, radius, 8);
     const background = mix(
-      mix(scenePass.getTextureNode(), blurred, amount),
+      mix(sceneTexture, blurred, amount),
       vec4(color(ramp['light-25']), 1),
       amount.mul(0.1)
     );
@@ -38,31 +54,42 @@ export function GreetingLayer() {
     // Render targets contain premultiplied color, so composite before the output transform.
     const pipeline = new RenderPipeline(
       renderer,
-      vec4(overlay.rgb.add(background.rgb.mul(overlay.a.oneMinus())), 1)
+      vec4(
+        background.rgb.mul(overlay.a.oneMinus()).add(overlay.rgb),
+        overlay.a.add(background.a.mul(overlay.a.oneMinus()))
+      )
     );
     return {
       scenePass,
       foregroundPass,
+      background,
       radius,
       blurred,
       pipeline,
       warmed: false,
+      preparedScreen: undefined as typeof screen,
+      width: 0,
+      height: 0,
+      pixelRatio: 0,
       pendingGreeting: null as Group | null,
     };
   }, [renderer, scene, foreground, camera, amount]);
 
-  useLayoutEffect(
-    () => () => {
+  // These objects are owned by this compositor and updated before rendering.
+  /* oxlint-disable react/immutability */
+  useLayoutEffect(() => {
+    const previousBackground = foreground.backgroundNode;
+    // Viewport lens and warp samples must contain the live sky beneath the foreground.
+    foreground.backgroundNode = effect.background;
+    return () => {
+      foreground.backgroundNode = previousBackground;
       effect.pipeline.dispose();
       effect.blurred.dispose();
       effect.scenePass.dispose();
       effect.foregroundPass.dispose();
-    },
-    [effect]
-  );
+    };
+  }, [effect, foreground]);
 
-  // These objects are owned by this compositor and updated before rendering.
-  /* oxlint-disable react/immutability */
   const prepareGreeting = useCallback(
     (group: Group) => {
       effect.pendingGreeting = group;
@@ -71,18 +98,27 @@ export function GreetingLayer() {
   );
 
   useFrame(
-    () => {
-      // Keep the compositor ready while the profiles are sharp, before shifting focus.
+    ({ size }) => {
+      const pixelRatio = renderer.getPixelRatio();
+      // Prepare the blur on screen or viewport changes, then bypass it while sharp.
       if (
         !effect.warmed ||
-        data?.profilesVisible ||
+        (data?.profilesVisible &&
+          (effect.preparedScreen !== screen ||
+            effect.width !== size.width ||
+            effect.height !== size.height ||
+            effect.pixelRatio !== pixelRatio)) ||
         effect.pendingGreeting ||
         amount.value > 0 ||
+        panel.value > 0 ||
+        charter.value > 0 ||
+        announcement.value > 0 ||
+        panelVisible ||
         greeting
       ) {
         foreground.environment = scene.environment;
         foreground.environmentIntensity = scene.environmentIntensity;
-        effect.radius.value = (amount.value || 1) * renderer.getPixelRatio() * 2;
+        effect.radius.value = (amount.value || 1) * pixelRatio * 2;
         const restore: (() => void)[] = [];
         if (effect.pendingGreeting && !greeting) {
           effect.pendingGreeting.traverse((child) => {
@@ -101,6 +137,10 @@ export function GreetingLayer() {
           for (const undo of restore) undo();
         }
         effect.warmed = true;
+        effect.preparedScreen = screen;
+        effect.width = size.width;
+        effect.height = size.height;
+        effect.pixelRatio = pixelRatio;
         effect.pendingGreeting = null;
       } else {
         renderer.render(scene, camera);
@@ -112,11 +152,30 @@ export function GreetingLayer() {
 
   return createPortal(
     <>
+      <ForegroundCamera camera={camera} />
       <directionalLight position={[3, 4, 6]} intensity={2} />
       <Suspense fallback={null}>
         <GreetingRenderer camera={camera} onReady={prepareGreeting} />
+        <PrinciplesRenderer camera={camera} panel={panel} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <HistoryRenderer />
+      </Suspense>
+      <Suspense fallback={null}>
+        <CharterRenderer />
+        <AnnouncementRenderer />
       </Suspense>
     </>,
-    foreground
+    foreground,
+    { camera }
   );
+}
+
+/** Keep portal animations and raycasting on the camera used by the compositor. */
+function ForegroundCamera({ camera }: { camera: ThreeCamera }) {
+  const set = useThree((state) => state.set);
+  useLayoutEffect(() => {
+    set({ camera });
+  }, [camera, set]);
+  return null;
 }

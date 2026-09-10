@@ -2,7 +2,15 @@ import { useEffect, useMemo, type Ref } from 'react';
 import { CanvasTexture, Shape, SRGBColorSpace, type Group, type Node } from 'three/webgpu';
 import { brand, ramp } from '../../theme.js';
 
-export function WaveBubble({ opacity, handRef }: { opacity: Node<'float'>; handRef: Ref<Group> }) {
+export function WaveBubble({
+  opacity,
+  handRef,
+  emoji = '👋',
+}: {
+  opacity: Node<'float'>;
+  handRef: Ref<Group>;
+  emoji?: string;
+}) {
   const shadowOpacity = useMemo(() => opacity.mul(0.16), [opacity]);
   const shape = useMemo(() => {
     const shape = new Shape();
@@ -27,11 +35,11 @@ export function WaveBubble({ opacity, handRef }: { opacity: Node<'float'>; handR
     context.font = '180px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.fillText('👋', 128, 138);
+    context.fillText(emoji, 128, 138);
     const texture = new CanvasTexture(canvas);
     texture.colorSpace = SRGBColorSpace;
     return texture;
-  }, []);
+  }, [emoji]);
   useEffect(() => () => texture.dispose(), [texture]);
 
   return (

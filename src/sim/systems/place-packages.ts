@@ -47,7 +47,8 @@ export function placePackages(world: World) {
     };
   };
 
-  if (data?.packageLayout === 'pair') {
+  if (data?.packageLayout === 'pair' || data?.packageLayout === 'community') {
+    const z = data.packageLayout === 'community' ? destination.cameraZ - 7.5 : 1.4;
     const packages = [...world.query(Package, Size, Float, Not(Hidden))].sort(
       (a, b) =>
         data.packageNames.indexOf(a.get(Package)!.name) -
@@ -58,7 +59,7 @@ export function placePackages(world: World) {
     packages.forEach((entity, index) => {
       const pkg = entity.get(Package)!;
       const limit = limits(
-        1.4,
+        z,
         entity.get(Size)!.radius,
         entity.get(Float)!.amplitude,
         pkg.label || pkg.name
@@ -68,13 +69,18 @@ export function placePackages(world: World) {
       const anchor = {
         x: destination.cameraX + Math.max(-limit.x, Math.min(limit.x, x)),
         y: destination.cameraY,
-        z: 1.4,
+        z,
       };
       if (entity.has(Anchor)) entity.set(Anchor, anchor);
       else entity.add(Anchor(anchor));
     });
     return;
   }
+
+  // The overview keeps packages in front of the letters
+  world.query(Package, Anchor, Not(Hidden)).updateEach(([, anchor]) => {
+    if (anchor.z < 0) anchor.z = 1.4;
+  });
 
   world
     .query(Package, Size, Float, Not(Anchor), Not(Hidden))
