@@ -1,76 +1,177 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Glitter / Pearl — WebGL2</title>
-<style>
-  :root{--ink:#12100c;--ink-soft:#6b675e;--rule:#dcd6c8;--paper:#f4f0e6}
-  *{box-sizing:border-box}
-  body{margin:0;padding:32px 24px 64px;background:var(--paper);color:var(--ink);
-    font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
-  main{max-width:840px;margin:0 auto}
-  h1{font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0 0 4px}
-  .sub{color:var(--ink-soft);margin:0 0 24px;font-size:13px}
-  .modes{display:flex;gap:8px;margin-bottom:12px}
-  .modes button{font:inherit;font-size:12px;letter-spacing:.06em;padding:7px 16px;
-    border:1px solid var(--rule);border-radius:999px;background:transparent;color:var(--ink-soft);cursor:pointer}
-  .modes button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-  #stage{border-radius:14px;overflow:hidden;line-height:0;transition:background .25s;background:#0C0A06}
-  canvas{width:100%;height:460px;display:block;cursor:crosshair}
-  .panel{margin-top:20px;display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
-  .ctl{display:flex;align-items:center;gap:10px}
-  .ctl label{flex:0 0 132px;font-size:12px;color:var(--ink-soft)}
-  .ctl input{flex:1;accent-color:var(--ink)}
-  .ctl output{flex:0 0 44px;text-align:right;font-size:12px;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  .err{margin-top:16px;padding:14px;border:1px solid #c4453d;border-radius:8px;
-    background:#fff;color:#8f2f28;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    font-size:12px;white-space:pre-wrap;display:none}
-  .hint{font-size:12px;color:var(--ink-soft);margin:14px 0 0}
-  @media (prefers-reduced-motion:reduce){#stage{transition:none}}
-</style>
-</head>
-<body>
-<main>
-  <h1>Glitter / Pearl &middot; WebGL2</h1>
-  <p class="sub">GLSL ES 3.00. No vertex buffer &mdash; the fullscreen triangle is generated from <code>gl_VertexID</code>.</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Glitter / Pearl — WebGL2</title>
+    <style>
+      :root {
+        --ink: #12100c;
+        --ink-soft: #6b675e;
+        --rule: #dcd6c8;
+        --paper: #f4f0e6;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 24px 64px;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          14px/1.5 ui-sans-serif,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 840px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--ink-soft);
+        margin: 0 0 24px;
+        font-size: 13px;
+      }
+      .modes {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .modes button {
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        padding: 7px 16px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--ink-soft);
+        cursor: pointer;
+      }
+      .modes button[aria-pressed='true'] {
+        background: var(--ink);
+        color: var(--paper);
+        border-color: var(--ink);
+      }
+      #stage {
+        border-radius: 14px;
+        overflow: hidden;
+        line-height: 0;
+        transition: background 0.25s;
+        background: #0c0a06;
+      }
+      canvas {
+        width: 100%;
+        height: 460px;
+        display: block;
+        cursor: crosshair;
+      }
+      .panel {
+        margin-top: 20px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+      .ctl {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .ctl label {
+        flex: 0 0 132px;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+      .ctl input {
+        flex: 1;
+        accent-color: var(--ink);
+      }
+      .ctl output {
+        flex: 0 0 44px;
+        text-align: right;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .err {
+        margin-top: 16px;
+        padding: 14px;
+        border: 1px solid #c4453d;
+        border-radius: 8px;
+        background: #fff;
+        color: #8f2f28;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        display: none;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--ink-soft);
+        margin: 14px 0 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #stage {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Glitter / Pearl &middot; WebGL2</h1>
+      <p class="sub">
+        GLSL ES 3.00. No vertex buffer &mdash; the fullscreen triangle is generated from
+        <code>gl_VertexID</code>.
+      </p>
 
-  <div class="modes">
-    <button id="mDark" aria-pressed="true">Mineral &middot; #0C0A06</button>
-    <button id="mLight" aria-pressed="false">Pearl &middot; #FAF5EA</button>
-  </div>
+      <div class="modes">
+        <button id="mDark" aria-pressed="true">Mineral &middot; #0C0A06</button>
+        <button id="mLight" aria-pressed="false">Pearl &middot; #FAF5EA</button>
+      </div>
 
-  <div id="stage"><canvas id="cv"></canvas></div>
-  <pre class="err" id="err"></pre>
-  <div class="panel" id="panel"></div>
-  <p class="hint">Nacre swirl applies to the pearl theme only. In pearl mode, facet sharpness becomes sheen tightness and grain density becomes lamellae frequency.</p>
-</main>
+      <div id="stage"><canvas id="cv"></canvas></div>
+      <pre class="err" id="err"></pre>
+      <div class="panel" id="panel"></div>
+      <p class="hint">
+        Nacre swirl applies to the pearl theme only. In pearl mode, facet sharpness becomes sheen
+        tightness and grain density becomes lamellae frequency.
+      </p>
+    </main>
 
-<script>
-(function(){
-'use strict';
+    <script>
+      (function () {
+        'use strict';
 
-// ---------------------------------------------------------------------------
-// 1. SHADER SOURCES
-//
-// These are JS template literals, NOT <script type="x-shader"> blocks.
-// That is deliberate: reading a <script> tag's textContent yields a leading
-// newline, and `#version 300 es` must be the very first token in the source
-// or the compiler rejects it. A template literal opened immediately after the
-// backtick has no such leading whitespace.
-// ---------------------------------------------------------------------------
+        // ---------------------------------------------------------------------------
+        // 1. SHADER SOURCES
+        //
+        // These are JS template literals, NOT <script type="x-shader"> blocks.
+        // That is deliberate: reading a <script> tag's textContent yields a leading
+        // newline, and `#version 300 es` must be the very first token in the source
+        // or the compiler rejects it. A template literal opened immediately after the
+        // backtick has no such leading whitespace.
+        // ---------------------------------------------------------------------------
 
-// Vertex shader: no attributes at all. gl_VertexID gives 0,1,2 and this maps
-// them to (-1,-1), (3,-1), (-1,3) -- a triangle that covers the clip volume.
-// A WebGL1 port would need a VBO here; WebGL2 does not.
-const VS = `#version 300 es
+        // Vertex shader: no attributes at all. gl_VertexID gives 0,1,2 and this maps
+        // them to (-1,-1), (3,-1), (-1,3) -- a triangle that covers the clip volume.
+        // A WebGL1 port would need a VBO here; WebGL2 does not.
+        const VS = `#version 300 es
 void main(){
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-const FS = `#version 300 es
+        const FS = `#version 300 es
 // glitter-pearl.frag
 // Dual-mode surface shader: dark glittering mineral / light pearlescent nacre.
 // GLSL ES 3.00 (WebGL2). Ported from the ES 1.00 original: \`#version 300 es\`
@@ -360,167 +461,180 @@ void main(){
 }
 `;
 
-// ---------------------------------------------------------------------------
-// 2. CONTEXT
-// ---------------------------------------------------------------------------
-const cv = document.getElementById('cv');
-const errBox = document.getElementById('err');
+        // ---------------------------------------------------------------------------
+        // 2. CONTEXT
+        // ---------------------------------------------------------------------------
+        const cv = document.getElementById('cv');
+        const errBox = document.getElementById('err');
 
-function fail(msg){
-  errBox.style.display = 'block';
-  errBox.textContent = msg;
-}
+        function fail(msg) {
+          errBox.style.display = 'block';
+          errBox.textContent = msg;
+        }
 
-const gl = cv.getContext('webgl2', {antialias:false, alpha:false});
-if(!gl){
-  fail('WebGL2 is unavailable in this browser.');
-  return;
-}
+        const gl = cv.getContext('webgl2', { antialias: false, alpha: false });
+        if (!gl) {
+          fail('WebGL2 is unavailable in this browser.');
+          return;
+        }
 
-// ---------------------------------------------------------------------------
-// 3. COMPILE + LINK
-//
-// Always check COMPILE_STATUS and LINK_STATUS. Skipping these is why a broken
-// shader shows up as a silent black canvas instead of an error.
-// ---------------------------------------------------------------------------
-function compile(type, src, label){
-  const sh = gl.createShader(type);
-  gl.shaderSource(sh, src);
-  gl.compileShader(sh);
-  if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)){
-    const log = gl.getShaderInfoLog(sh);
-    gl.deleteShader(sh);
-    throw new Error(label + ' failed to compile:\n' + log);
-  }
-  return sh;
-}
+        // ---------------------------------------------------------------------------
+        // 3. COMPILE + LINK
+        //
+        // Always check COMPILE_STATUS and LINK_STATUS. Skipping these is why a broken
+        // shader shows up as a silent black canvas instead of an error.
+        // ---------------------------------------------------------------------------
+        function compile(type, src, label) {
+          const sh = gl.createShader(type);
+          gl.shaderSource(sh, src);
+          gl.compileShader(sh);
+          if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+            const log = gl.getShaderInfoLog(sh);
+            gl.deleteShader(sh);
+            throw new Error(label + ' failed to compile:\n' + log);
+          }
+          return sh;
+        }
 
-let prog;
-try {
-  const vs = compile(gl.VERTEX_SHADER, VS, 'Vertex shader');
-  const fs = compile(gl.FRAGMENT_SHADER, FS, 'Fragment shader');
-  prog = gl.createProgram();
-  gl.attachShader(prog, vs);
-  gl.attachShader(prog, fs);
-  gl.linkProgram(prog);
-  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
-    throw new Error('Program failed to link:\n' + gl.getProgramInfoLog(prog));
-  }
-  // Shaders can be detached and deleted once linked.
-  gl.detachShader(prog, vs); gl.deleteShader(vs);
-  gl.detachShader(prog, fs); gl.deleteShader(fs);
-} catch(e){
-  fail(e.message);
-  return;
-}
-gl.useProgram(prog);
+        let prog;
+        try {
+          const vs = compile(gl.VERTEX_SHADER, VS, 'Vertex shader');
+          const fs = compile(gl.FRAGMENT_SHADER, FS, 'Fragment shader');
+          prog = gl.createProgram();
+          gl.attachShader(prog, vs);
+          gl.attachShader(prog, fs);
+          gl.linkProgram(prog);
+          if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            throw new Error('Program failed to link:\n' + gl.getProgramInfoLog(prog));
+          }
+          // Shaders can be detached and deleted once linked.
+          gl.detachShader(prog, vs);
+          gl.deleteShader(vs);
+          gl.detachShader(prog, fs);
+          gl.deleteShader(fs);
+        } catch (e) {
+          fail(e.message);
+          return;
+        }
+        gl.useProgram(prog);
 
-// A VAO must be bound for drawArrays even when no attributes are used.
-// Some drivers tolerate the default VAO; binding an empty one is portable.
-const vao = gl.createVertexArray();
-gl.bindVertexArray(vao);
+        // A VAO must be bound for drawArrays even when no attributes are used.
+        // Some drivers tolerate the default VAO; binding an empty one is portable.
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
 
-// ---------------------------------------------------------------------------
-// 4. CONTROLS
-// name, label, min, max, step, default, uniform, divisor
-// ---------------------------------------------------------------------------
-const SPEC = [
-  ['trans','White transparency',0,100,1,82,'uTrans',100],
-  ['rain','Rainbow mix',0,100,1,100,'uRain',100],
-  ['spread','Spectrum spread',20,500,5,155,'uSpread',100],
-  ['swirl','Nacre swirl',0,200,5,200,'uSwirl',100],
-  ['glow','Cursor glow',0,200,5,0,'uGlow',100],
-  ['base','Stone gray',0,250,5,0,'uBase',100],
-  ['cloud','White clouding',0,150,1,0,'uCloud',100],
-  ['grain','Grain density',30,700,10,460,'uGrain',1],
-  ['dens','Glitter density',2,100,1,100,'uDens',100],
-  ['scale','Grain size',15,220,1,191,'uScale',1],
-  ['sharp','Facet sharpness',10,400,5,80,'uSharp',1],
-  ['white','Glint strength',0,320,5,320,'uWhite',100]
-];
+        // ---------------------------------------------------------------------------
+        // 4. CONTROLS
+        // name, label, min, max, step, default, uniform, divisor
+        // ---------------------------------------------------------------------------
+        const SPEC = [
+          ['trans', 'White transparency', 0, 100, 1, 82, 'uTrans', 100],
+          ['rain', 'Rainbow mix', 0, 100, 1, 100, 'uRain', 100],
+          ['spread', 'Spectrum spread', 20, 500, 5, 155, 'uSpread', 100],
+          ['swirl', 'Nacre swirl', 0, 200, 5, 200, 'uSwirl', 100],
+          ['glow', 'Cursor glow', 0, 200, 5, 0, 'uGlow', 100],
+          ['base', 'Stone gray', 0, 250, 5, 0, 'uBase', 100],
+          ['cloud', 'White clouding', 0, 150, 1, 0, 'uCloud', 100],
+          ['grain', 'Grain density', 30, 700, 10, 460, 'uGrain', 1],
+          ['dens', 'Glitter density', 2, 100, 1, 100, 'uDens', 100],
+          ['scale', 'Grain size', 15, 220, 1, 191, 'uScale', 1],
+          ['sharp', 'Facet sharpness', 10, 400, 5, 80, 'uSharp', 1],
+          ['white', 'Glint strength', 0, 320, 5, 320, 'uWhite', 100],
+        ];
 
-const panel = document.getElementById('panel');
-const inputs = {};
-SPEC.forEach(s => {
-  const row = document.createElement('div');
-  row.className = 'ctl';
-  row.innerHTML =
-    `<label for="i_${s[0]}">${s[1]}</label>` +
-    `<input type="range" id="i_${s[0]}" min="${s[2]}" max="${s[3]}" step="${s[4]}" value="${s[5]}">` +
-    `<output>${s[5]}</output>`;
-  panel.appendChild(row);
-  const el = row.querySelector('input'), out = row.querySelector('output');
-  inputs[s[0]] = el;
-  el.addEventListener('input', () => { out.value = el.value; });
-});
+        const panel = document.getElementById('panel');
+        const inputs = {};
+        SPEC.forEach((s) => {
+          const row = document.createElement('div');
+          row.className = 'ctl';
+          row.innerHTML =
+            `<label for="i_${s[0]}">${s[1]}</label>` +
+            `<input type="range" id="i_${s[0]}" min="${s[2]}" max="${s[3]}" step="${s[4]}" value="${s[5]}">` +
+            `<output>${s[5]}</output>`;
+          panel.appendChild(row);
+          const el = row.querySelector('input'),
+            out = row.querySelector('output');
+          inputs[s[0]] = el;
+          el.addEventListener('input', () => {
+            out.value = el.value;
+          });
+        });
 
-// Cache uniform locations once. Looking them up per frame is a common and
-// avoidable cost.
-const U = {};
-['uRes','uTime','uL','uMode'].concat(SPEC.map(s => s[6]))
-  .forEach(k => { U[k] = gl.getUniformLocation(prog, k); });
+        // Cache uniform locations once. Looking them up per frame is a common and
+        // avoidable cost.
+        const U = {};
+        ['uRes', 'uTime', 'uL', 'uMode'].concat(SPEC.map((s) => s[6])).forEach((k) => {
+          U[k] = gl.getUniformLocation(prog, k);
+        });
 
-// ---------------------------------------------------------------------------
-// 5. INTERACTION
-// ---------------------------------------------------------------------------
-let mode = 0;
-const stage = document.getElementById('stage');
-const mD = document.getElementById('mDark'), mL = document.getElementById('mLight');
-function setMode(m){
-  mode = m;
-  stage.style.background = m ? '#FAF5EA' : '#0C0A06';
-  mD.setAttribute('aria-pressed', m ? 'false' : 'true');
-  mL.setAttribute('aria-pressed', m ? 'true' : 'false');
-}
-mD.addEventListener('click', () => setMode(0));
-mL.addEventListener('click', () => setMode(1));
+        // ---------------------------------------------------------------------------
+        // 5. INTERACTION
+        // ---------------------------------------------------------------------------
+        let mode = 0;
+        const stage = document.getElementById('stage');
+        const mD = document.getElementById('mDark'),
+          mL = document.getElementById('mLight');
+        function setMode(m) {
+          mode = m;
+          stage.style.background = m ? '#FAF5EA' : '#0C0A06';
+          mD.setAttribute('aria-pressed', m ? 'false' : 'true');
+          mL.setAttribute('aria-pressed', m ? 'true' : 'false');
+        }
+        mD.addEventListener('click', () => setMode(0));
+        mL.addEventListener('click', () => setMode(1));
 
-let mx = 0, my = 0, hasPointer = false;
-cv.addEventListener('pointermove', e => {
-  const r = cv.getBoundingClientRect();
-  // uL lives in the same aspect-corrected space as uv:
-  //   uv = (fragCoord - 0.5*uRes) / uRes.y
-  // so y spans -0.5..0.5 and x is scaled by the aspect ratio. Passing pixels
-  // or raw 0..1 UVs here puts the light in the wrong place.
-  mx = ((e.clientX - r.left) / r.width - 0.5) * (r.width / r.height);
-  my = -((e.clientY - r.top) / r.height - 0.5);
-  hasPointer = true;
-});
-cv.addEventListener('pointerleave', () => { hasPointer = false; });
+        let mx = 0,
+          my = 0,
+          hasPointer = false;
+        cv.addEventListener('pointermove', (e) => {
+          const r = cv.getBoundingClientRect();
+          // uL lives in the same aspect-corrected space as uv:
+          //   uv = (fragCoord - 0.5*uRes) / uRes.y
+          // so y spans -0.5..0.5 and x is scaled by the aspect ratio. Passing pixels
+          // or raw 0..1 UVs here puts the light in the wrong place.
+          mx = ((e.clientX - r.left) / r.width - 0.5) * (r.width / r.height);
+          my = -((e.clientY - r.top) / r.height - 0.5);
+          hasPointer = true;
+        });
+        cv.addEventListener('pointerleave', () => {
+          hasPointer = false;
+        });
 
-// ---------------------------------------------------------------------------
-// 6. RENDER LOOP
-// ---------------------------------------------------------------------------
-function resize(){
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
-  if(cv.width !== w || cv.height !== h){
-    cv.width = w; cv.height = h;
-    gl.viewport(0, 0, w, h);
-  }
-}
+        // ---------------------------------------------------------------------------
+        // 6. RENDER LOOP
+        // ---------------------------------------------------------------------------
+        function resize() {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const w = Math.round(cv.clientWidth * dpr),
+            h = Math.round(cv.clientHeight * dpr);
+          if (cv.width !== w || cv.height !== h) {
+            cv.width = w;
+            cv.height = h;
+            gl.viewport(0, 0, w, h);
+          }
+        }
 
-const t0 = performance.now();
-function frame(){
-  resize();
-  const t = (performance.now() - t0) / 1000;
-  const lx = hasPointer ? mx : Math.sin(t * 0.32) * 0.55;
-  const ly = hasPointer ? my : Math.cos(t * 0.23) * 0.30;
+        const t0 = performance.now();
+        function frame() {
+          resize();
+          const t = (performance.now() - t0) / 1000;
+          const lx = hasPointer ? mx : Math.sin(t * 0.32) * 0.55;
+          const ly = hasPointer ? my : Math.cos(t * 0.23) * 0.3;
 
-  gl.uniform2f(U.uRes, cv.width, cv.height);
-  gl.uniform1f(U.uTime, t);
-  gl.uniform2f(U.uL, lx, ly);
-  gl.uniform1f(U.uMode, mode);
-  SPEC.forEach(s => {
-    gl.uniform1f(U[s[6]], parseFloat(inputs[s[0]].value) / s[7]);
-  });
+          gl.uniform2f(U.uRes, cv.width, cv.height);
+          gl.uniform1f(U.uTime, t);
+          gl.uniform2f(U.uL, lx, ly);
+          gl.uniform1f(U.uMode, mode);
+          SPEC.forEach((s) => {
+            gl.uniform1f(U[s[6]], parseFloat(inputs[s[0]].value) / s[7]);
+          });
 
-  // 3 vertices, no buffer, no attribute state.
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
-  requestAnimationFrame(frame);
-}
-frame();
-})();
-</script>
-</body>
+          // 3 vertices, no buffer, no attribute state.
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          requestAnimationFrame(frame);
+        }
+        frame();
+      })();
+    </script>
+  </body>
 </html>

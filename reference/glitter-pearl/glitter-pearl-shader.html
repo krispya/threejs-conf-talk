@@ -1,542 +1,690 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Glitter / Pearl surface shader</title>
-<style>
-  :root{
-    --ink:#12100c; --ink-soft:#6b675e; --rule:#dcd6c8; --paper:#f4f0e6;
-  }
-  *{box-sizing:border-box}
-  body{
-    margin:0; padding:32px 24px 64px;
-    background:var(--paper); color:var(--ink);
-    font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
-  }
-  main{max-width:840px;margin:0 auto}
-  h1{
-    font-size:15px; font-weight:600; letter-spacing:.14em; text-transform:uppercase;
-    margin:0 0 4px;
-  }
-  .sub{color:var(--ink-soft); margin:0 0 24px; font-size:13px}
-  .modes{display:flex;gap:8px;margin-bottom:12px}
-  .modes button{
-    font:inherit; font-size:12px; letter-spacing:.06em; padding:7px 16px;
-    border:1px solid var(--rule); border-radius:999px; background:transparent;
-    color:var(--ink-soft); cursor:pointer;
-  }
-  .modes button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-  #stage{border-radius:14px;overflow:hidden;line-height:0;transition:background .25s;background:#0C0A06}
-  canvas{width:100%;height:460px;display:block;cursor:crosshair}
-  .panel{
-    margin-top:20px; display:grid; gap:10px;
-    grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
-  }
-  .ctl{display:flex;align-items:center;gap:10px}
-  .ctl label{
-    flex:0 0 132px; font-size:12px; color:var(--ink-soft);
-  }
-  .ctl input{flex:1;accent-color:var(--ink)}
-  .ctl output{
-    flex:0 0 44px; text-align:right; font-size:12px;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  }
-  .foot{display:flex;gap:10px;align-items:center;margin-top:24px;flex-wrap:wrap}
-  .foot button{
-    font:inherit;font-size:12px;padding:7px 14px;border:1px solid var(--rule);
-    border-radius:8px;background:transparent;color:var(--ink);cursor:pointer;
-  }
-  .foot button:hover{border-color:var(--ink)}
-  .hint{font-size:12px;color:var(--ink-soft);margin:14px 0 0}
-  pre#dump{
-    margin-top:14px;padding:14px;border:1px solid var(--rule);border-radius:8px;
-    background:#fff;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    font-size:12px;overflow:auto;display:none;white-space:pre-wrap;
-  }
-  @media (prefers-reduced-motion:reduce){#stage{transition:none}}
-</style>
-</head>
-<body>
-<main>
-  <h1>Glitter / Pearl</h1>
-  <p class="sub">Move the pointer to place the light. It drifts on its own when the pointer leaves.</p>
-
-  <div class="modes">
-    <button id="mDark" aria-pressed="true">Mineral &middot; #0C0A06</button>
-    <button id="mLight" aria-pressed="false">Pearl &middot; #FAF5EA</button>
-  </div>
-
-  <div id="stage"><canvas id="cv"></canvas></div>
-
-  <div class="panel" id="panel"></div>
-
-  <p class="hint">Nacre swirl applies to the pearl theme only. In pearl mode, facet sharpness becomes sheen tightness and grain density becomes lamellae frequency.</p>
-
-  <div class="foot">
-    <button id="copyVals">Copy uniform values</button>
-    <button id="reset">Reset to defaults</button>
-    <button id="toggleDump">Show values</button>
-  </div>
-  <pre id="dump"></pre>
-</main>
-
-<script type="x-shader/x-fragment" id="fs">
-// glitter-pearl.frag
-// Dual-mode surface shader: dark glittering mineral / light pearlescent nacre.
-// GLSL ES 1.00 (WebGL1). For WebGL2 / desktop GL, change `gl_FragColor` to an
-// `out vec4` and add a `#version` directive.
-//
-// Draw a single fullscreen triangle or quad; this shader ignores vertex data
-// and works purely from gl_FragCoord.
-//
-// ---------------------------------------------------------------------------
-// UNIFORMS
-// ---------------------------------------------------------------------------
-// uRes     vec2   viewport size in pixels
-// uTime    float  seconds since start
-// uL       vec2   light / cursor position in aspect-corrected uv space,
-//                 where uv = (fragCoord - 0.5*uRes) / uRes.y
-//                 so y spans -0.5..0.5 and x spans -aspect/2..aspect/2
-// uMode    float  0.0 = mineral (dark), 1.0 = pearl (light). Fractional values
-//                 crossfade between the two composites.
-//
-// Shared controls (slider value / 100 unless noted):
-// uTrans   float  0..1    white-glint transparency; 1 hides glints outside the band
-// uRain    float  0..1    iridescence / rainbow strength
-// uSpread  float  0.2..5  spectral band frequency; sets the ring radius
-// uSwirl   float  0..2    nacre domain-warp magnitude (pearl mode only)
-// uGlow    float  0..2    cursor halo intensity
-// uBase    float  0..2.5  base body tone (darkens from cream in pearl mode)
-// uCloud   float  0..1.5  broad mottling / clouding
-// uGrain   float  30..700 fine speckle frequency (raw slider value, not /100)
-// uDens    float  0..1    fraction of grid cells containing a facet
-// uScale   float  15..220 facet grid frequency (raw slider value, not /100)
-// uSharp   float  10..400 specular exponent (raw slider value, not /100);
-//                 remapped to 2..22 for the pearl sheen
-// uWhite   float  0..3.2  glint strength
-//
-// ---------------------------------------------------------------------------
-// PALETTE
-// ---------------------------------------------------------------------------
-// The spectrum is a 7-stop cyclic ramp through the brand colors:
-//   #D855F9  #FF4980  #FFC043  #EBFF0F  #CAF543  #00F7A3  #2BDCF6
-// One unit of `brand()` input = one full rotation. Stops are evenly spaced in
-// sevenths, not in OKLCH hue angle, so the ramp lingers in the yellow-green
-// region where four stops cluster.
-// ---------------------------------------------------------------------------
-
-precision highp float;
-
-uniform vec2  uRes;
-uniform float uTime;
-uniform vec2  uL;
-uniform float uDens;
-uniform float uScale;
-uniform float uSharp;
-uniform float uWhite;
-uniform float uGrain;
-uniform float uCloud;
-uniform float uBase;
-uniform float uGlow;
-uniform float uRain;
-uniform float uSpread;
-uniform float uTrans;
-uniform float uMode;
-uniform float uSwirl;
-
-// --- hashing ---------------------------------------------------------------
-
-float h21(vec2 p){
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-vec2 h22(vec2 p){
-  float a = h21(p);
-  float b = h21(p + a + 7.13);
-  return vec2(a, b);
-}
-vec3 h33(vec2 p){
-  float a = h21(p);
-  float b = h21(p + a + 3.71);
-  float c = h21(p + b + 9.13);
-  return vec3(a, b, c);
-}
-
-// --- brand spectrum --------------------------------------------------------
-// Cyclic: brand(0.0) == brand(1.0) == purple. Chained mixes rather than a
-// lookup table so it stays a pure function with no texture dependency.
-
-vec3 brand(float x){
-  float h = fract(x) * 7.0;
-  vec3 c = vec3(0.847, 0.333, 0.976);                          // #D855F9
-  c = mix(c, vec3(1.000, 0.286, 0.502), clamp(h,       0.0, 1.0)); // #FF4980
-  c = mix(c, vec3(1.000, 0.753, 0.263), clamp(h - 1.0, 0.0, 1.0)); // #FFC043
-  c = mix(c, vec3(0.922, 1.000, 0.059), clamp(h - 2.0, 0.0, 1.0)); // #EBFF0F
-  c = mix(c, vec3(0.792, 0.961, 0.263), clamp(h - 3.0, 0.0, 1.0)); // #CAF543
-  c = mix(c, vec3(0.000, 0.969, 0.639), clamp(h - 4.0, 0.0, 1.0)); // #00F7A3
-  c = mix(c, vec3(0.169, 0.863, 0.965), clamp(h - 5.0, 0.0, 1.0)); // #2BDCF6
-  c = mix(c, vec3(0.847, 0.333, 0.976), clamp(h - 6.0, 0.0, 1.0)); // wrap
-  return c;
-}
-
-// --- noise -----------------------------------------------------------------
-
-float vn(vec2 p){
-  vec2 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  float a = h21(i);
-  float b = h21(i + vec2(1.0, 0.0));
-  float c = h21(i + vec2(0.0, 1.0));
-  float d = h21(i + vec2(1.0, 1.0));
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-float fbm(vec2 p){
-  float s = 0.0, a = 0.5;
-  for(int i = 0; i < 5; i++){ s += a * vn(p); p *= 2.03; a *= 0.5; }
-  return s;
-}
-float fbm3(vec2 p){
-  float s = 0.0, a = 0.5;
-  for(int i = 0; i < 3; i++){ s += a * vn(p); p *= 2.07; a *= 0.5; }
-  return s;
-}
-
-// Domain-warped field: one noise displaces the coordinates of another.
-// This is what produces flowing nacre layers rather than isotropic blobs.
-float pfield(vec2 p, float sw, float tt){
-  vec2 w = vec2(
-    fbm3(p * 1.25 + vec2(0.0,  tt * 0.030)),
-    fbm3(p * 1.25 + vec2(5.2, -tt * 0.022))
-  );
-  return fbm3(p * 2.3 + (w - 0.5) * sw * 3.2);
-}
-
-void main(){
-  vec2  uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
-  float t  = uTime;
-
-  // --- cursor-relative spectral geometry -----------------------------------
-  vec2  dl  = uv - uL;
-  float gd  = length(dl);
-  vec2  rad = dl / max(gd, 0.0001);
-
-  // cyc counts full palette rotations outward from the cursor.
-  float cyc = gd * uSpread;
-
-  // Two-sided window: white inside cycle 1, one rainbow, white after cycle 2.
-  float band = smoothstep(0.78, 1.12, cyc) * (1.0 - smoothstep(1.88, 2.22, cyc));
-
-  // Opacity follows the same curve, so grains appear as they take on color.
-  float vis = mix(1.0, band, uTrans);
-
-  // Two-lobe halo: tight core plus wide falloff reads better than one gaussian.
-  float halo = exp(-gd * gd * 5.0) * 0.55 + exp(-gd * gd * 26.0) * 0.45;
-  float glow = halo * uGlow;
-
-  // --- shared surface fields -----------------------------------------------
-  float n1     = fbm(uv * 3.2);
-  float n2     = fbm(uv * 11.0 + n1 * 1.5);
-  float grain  = vn(uv * uGrain);
-  float grain2 = vn(uv * uGrain * 2.7 + 31.4);
-
-  float cw    = mix(0.62, 0.26, clamp(uCloud / 1.5, 0.0, 1.0));
-  float cl    = clamp(smoothstep(cw, 0.95, n2) * uCloud, 0.0, 1.0);
-  float bodyN = smoothstep(0.28, 0.78, n1);
-
-  // --- mineral body --------------------------------------------------------
-  vec3 dk = vec3(0.055, 0.052, 0.062);
-  vec3 md = vec3(0.200, 0.190, 0.215);
-  vec3 lt = vec3(0.400, 0.385, 0.400);
-
-  vec3 rockD = mix(mix(dk, md, bodyN) * uBase, lt, cl);
-  rockD *= 0.84 + 0.24 * grain + 0.10 * grain2;
-
-  // Relief normal from the fbm gradient. Shallow on purpose: the facets are
-  // meant to read as one plane, not as a displaced surface.
-  float e = 0.012;
-  vec2 slope = vec2(
-    fbm(uv * 11.0 + vec2(e, 0.0)) - fbm(uv * 11.0 - vec2(e, 0.0)),
-    fbm(uv * 11.0 + vec2(0.0, e)) - fbm(uv * 11.0 - vec2(0.0, e))
-  );
-  vec3 sn = normalize(vec3(-slope * 3.0, 1.0));
-
-  vec3  Lw   = normalize(vec3(uL - uv, 0.62));
-  float lamb = max(dot(sn, Lw), 0.0);
-  rockD *= 0.78 + 0.34 * lamb;
-
-  vec3 V = vec3(0.0, 0.0, 1.0);
-  vec3 H = normalize(Lw + V);
-
-  // --- facet glitter -------------------------------------------------------
-  // Single grid, one depth. Each cell holds a facet with a random tilt; it
-  // flares only when its normal bisects light and view. 3x3 neighborhood so
-  // grains can cross cell borders without popping.
-  vec2 gp = uv * uScale;
-  vec2 id = floor(gp);
-  vec2 gv = fract(gp) - 0.5;
-
-  vec3  sparkD = vec3(0.0);
-  float sparkI = 0.0;
-
-  for(int y = -1; y <= 1; y++){
-    for(int x = -1; x <= 1; x++){
-      vec2 o = vec2(float(x), float(y));
-      vec3 r = h33(id + o);
-
-      float alive = step(r.x, uDens);
-      vec2  cp    = o + (r.yz - 0.5) * 0.82;
-      float d     = length(gv - cp);
-      float core  = smoothstep(0.13, 0.0, d);
-
-      vec2 tl = (h22(id + o + 11.71) - 0.5) * 1.5;
-      tl += 0.05 * vec2(
-        sin(t * (0.5 + r.y * 1.3) + r.z * 21.0),
-        cos(t * (0.4 + r.z * 1.1) + r.y * 17.0)
-      );
-      vec3 n = normalize(vec3(tl, 0.72));
-
-      float sp = pow(max(dot(n, H), 0.0), uSharp) * (0.6 + r.z * 0.9);
-
-      // Hue: radial cycle, plus the facet's own tilt projected outward
-      // (the dispersion analog), plus a per-grain offset and slow drift.
-      float hue = (cyc - 1.0) + dot(tl, rad) * 0.14 + r.y * 0.10 - t * 0.02;
-
-      float bl = 0.22 * exp(-d * d * 90.0);
-      float w  = sp * (core + bl) * alive * vis;
-
-      sparkD += mix(vec3(1.0), brand(hue) * 1.25, uRain * band) * w;
-      sparkI += w;
-    }
-  }
-
-  // --- mineral composite (additive over near-black) -------------------------
-  vec3 colD = vec3(0.047, 0.039, 0.024) + rockD + sparkD * uWhite * (1.0 + glow * 1.1);
-  colD += vec3(0.70, 0.78, 1.00) * glow * 0.10;
-  colD += vec3(0.90, 0.93, 1.00) * 0.02 * lamb;
-  colD *= 1.0 - 0.42 * dot(uv, uv);
-  colD  = colD / (1.0 + colD * 0.85);   // Reinhard
-  colD  = pow(colD, vec3(0.82));
-
-  // --- pearl body ----------------------------------------------------------
-  // Different model, not an inversion: continuous thin-film interference over
-  // a soft warped normal, rather than sparse specular points.
-  float nac = pfield(uv, uSwirl, t);
-
-  float pe = 0.010;
-  float nx = fbm3((uv + vec2(pe, 0.0)) * 2.3) - fbm3((uv - vec2(pe, 0.0)) * 2.3);
-  float ny = fbm3((uv + vec2(0.0, pe)) * 2.3) - fbm3((uv - vec2(0.0, pe)) * 2.3);
-  vec3  Np = normalize(vec3(-vec2(nx, ny) * 4.5, 1.0));
-
-  // Anisotropic sample: stretched on x, tight on y, giving lamellae striations.
-  float lamin = vn(uv * vec2(3.0, uGrain * 0.55) + 11.0);
-
-  float ct        = max(dot(Np, H), 0.0);
-  float sheenExp  = mix(2.0, 22.0, clamp(uSharp / 400.0, 0.0, 1.0));
-  float sheen     = pow(ct, sheenExp);
-  float fres      = pow(1.0 - ct, 3.0);
-
-  vec3 cream = vec3(0.980, 0.961, 0.918);   // #FAF5EA
-
-  // Base sits at 0.90 of cream so the sheen has headroom to brighten into.
-  vec3 pb = cream * (0.900 + 0.060 * nac + 0.035 * lamin);
-  pb = mix(pb, pb * 0.80, bodyN * clamp(uBase, 0.0, 1.0));
-  pb = mix(pb, vec3(0.760, 0.740, 0.700), cl * 0.55);
-
-  // Interference phase: film thickness + view angle + striations + ring.
-  float phase = nac * 1.9 + fres * 1.4 + lamin * 0.30 + cyc * 0.28 - t * 0.03;
-
-  // 28% toward white is what makes this read as sheen rather than printed ink.
-  vec3 irid = mix(brand(phase), vec3(1.0), 0.28);
-
-  float ir = uRain * (0.20 + 0.80 * band) * (0.30 + 0.70 * sheen);
-  pb  = mix(pb, irid, clamp(ir * 0.62, 0.0, 1.0));
-  pb += vec3(0.10, 0.10, 0.095) * sheen * 0.55;
-
-  // Micro-shimmer: same facets, low alpha, tinted by the interference color.
-  float ma = clamp(sparkI * uWhite * (1.0 + glow * 1.1) * 0.8, 0.0, 1.0);
-  vec3  mt = mix(vec3(0.36, 0.35, 0.33), irid * 0.80, uRain * band);
-  pb = mix(pb, mt, ma * 0.50);
-
-  pb += vec3(0.030, 0.026, 0.016) * glow * 0.7;
-  pb *= 1.0 - 0.10 * dot(uv, uv);
-
-  // No tone mapping here: the Reinhard curve would crush cream to muddy tan.
-  vec3 colL = clamp(pb, 0.0, 1.0);
-
-  gl_FragColor = vec4(mix(colD, colL, uMode), 1.0);
-}
-
-</script>
-
-<script>
-(function(){
-  // name, label, min, max, step, default, uniform, divisor
-  var SPEC = [
-    ['trans','White transparency',0,100,1,82,'uTrans',100],
-    ['rain','Rainbow mix',0,100,1,100,'uRain',100],
-    ['spread','Spectrum spread',20,500,5,155,'uSpread',100],
-    ['swirl','Nacre swirl',0,200,5,200,'uSwirl',100],
-    ['glow','Cursor glow',0,200,5,0,'uGlow',100],
-    ['base','Stone gray',0,250,5,0,'uBase',100],
-    ['cloud','White clouding',0,150,1,0,'uCloud',100],
-    ['grain','Grain density',30,700,10,460,'uGrain',1],
-    ['dens','Glitter density',2,100,1,100,'uDens',100],
-    ['scale','Grain size',15,220,1,191,'uScale',1],
-    ['sharp','Facet sharpness',10,400,5,80,'uSharp',1],
-    ['white','Glint strength',0,320,5,320,'uWhite',100]
-  ];
-
-  var panel = document.getElementById('panel');
-  var inputs = {};
-  SPEC.forEach(function(s){
-    var row = document.createElement('div');
-    row.className = 'ctl';
-    row.innerHTML =
-      '<label for="i_'+s[0]+'">'+s[1]+'</label>' +
-      '<input type="range" id="i_'+s[0]+'" min="'+s[2]+'" max="'+s[3]+'" step="'+s[4]+'" value="'+s[5]+'">' +
-      '<output id="o_'+s[0]+'">'+s[5]+'</output>';
-    panel.appendChild(row);
-    var el = row.querySelector('input');
-    var out = row.querySelector('output');
-    inputs[s[0]] = {el:el, out:out, spec:s};
-    el.addEventListener('input', function(){ out.value = el.value; dumpVals(); });
-  });
-
-  var cv = document.getElementById('cv');
-  var gl = cv.getContext('webgl', {antialias:false, alpha:false});
-  if(!gl){
-    document.getElementById('stage').innerHTML =
-      '<p style="color:#fff;padding:24px;line-height:1.5">WebGL is unavailable in this browser.</p>';
-    return;
-  }
-
-  var VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}';
-  var FS = document.getElementById('fs').textContent;
-
-  function compile(type, src){
-    var sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)){
-      console.error(gl.getShaderInfoLog(sh));
-    }
-    return sh;
-  }
-
-  var prog = gl.createProgram();
-  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
-  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
-  gl.linkProgram(prog);
-  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
-    console.error(gl.getProgramInfoLog(prog));
-  }
-  gl.useProgram(prog);
-
-  var buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-  var loc = gl.getAttribLocation(prog, 'p');
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-
-  var U = {};
-  ['uRes','uTime','uL','uMode'].concat(SPEC.map(function(s){return s[6];}))
-    .forEach(function(k){ U[k] = gl.getUniformLocation(prog, k); });
-
-  var mode = 0;
-  var stage = document.getElementById('stage');
-  var mD = document.getElementById('mDark'), mL = document.getElementById('mLight');
-  function setMode(m){
-    mode = m;
-    stage.style.background = m ? '#FAF5EA' : '#0C0A06';
-    mD.setAttribute('aria-pressed', m ? 'false' : 'true');
-    mL.setAttribute('aria-pressed', m ? 'true' : 'false');
-    dumpVals();
-  }
-  mD.addEventListener('click', function(){ setMode(0); });
-  mL.addEventListener('click', function(){ setMode(1); });
-
-  var mx = 0, my = 0, hasPointer = false;
-  function track(e){
-    var r = cv.getBoundingClientRect();
-    var pt = e.touches ? e.touches[0] : e;
-    mx = ((pt.clientX - r.left) / r.width - 0.5) * (r.width / r.height);
-    my = -((pt.clientY - r.top) / r.height - 0.5);
-    hasPointer = true;
-  }
-  cv.addEventListener('mousemove', track);
-  cv.addEventListener('touchmove', function(e){ track(e); e.preventDefault(); }, {passive:false});
-  cv.addEventListener('mouseleave', function(){ hasPointer = false; });
-  cv.addEventListener('touchend', function(){ hasPointer = false; });
-
-  function resize(){
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
-    if(cv.width !== w || cv.height !== h){
-      cv.width = w; cv.height = h;
-      gl.viewport(0, 0, w, h);
-    }
-  }
-
-  function values(){
-    var o = {uMode: mode};
-    SPEC.forEach(function(s){
-      o[s[6]] = parseFloat(inputs[s[0]].el.value) / s[7];
-    });
-    return o;
-  }
-
-  var dump = document.getElementById('dump');
-  function dumpVals(){
-    if(dump.style.display === 'none') return;
-    dump.textContent = JSON.stringify(values(), null, 2);
-  }
-  document.getElementById('toggleDump').addEventListener('click', function(){
-    var on = dump.style.display === 'none';
-    dump.style.display = on ? 'block' : 'none';
-    this.textContent = on ? 'Hide values' : 'Show values';
-    dumpVals();
-  });
-  document.getElementById('copyVals').addEventListener('click', function(){
-    var btn = this;
-    navigator.clipboard.writeText(JSON.stringify(values(), null, 2)).then(function(){
-      btn.textContent = 'Copied';
-      setTimeout(function(){ btn.textContent = 'Copy uniform values'; }, 1400);
-    }, function(){
-      btn.textContent = 'Copy failed — use Show values';
-      setTimeout(function(){ btn.textContent = 'Copy uniform values'; }, 2200);
-    });
-  });
-  document.getElementById('reset').addEventListener('click', function(){
-    SPEC.forEach(function(s){
-      inputs[s[0]].el.value = s[5];
-      inputs[s[0]].out.value = s[5];
-    });
-    dumpVals();
-  });
-
-  var t0 = performance.now();
-  function frame(){
-    resize();
-    var t = (performance.now() - t0) / 1000;
-    var lx = hasPointer ? mx : Math.sin(t * 0.32) * 0.55;
-    var ly = hasPointer ? my : Math.cos(t * 0.23) * 0.30;
-
-    gl.uniform2f(U.uRes, cv.width, cv.height);
-    gl.uniform1f(U.uTime, t);
-    gl.uniform2f(U.uL, lx, ly);
-    gl.uniform1f(U.uMode, mode);
-    SPEC.forEach(function(s){
-      gl.uniform1f(U[s[6]], parseFloat(inputs[s[0]].el.value) / s[7]);
-    });
-
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    requestAnimationFrame(frame);
-  }
-  frame();
-})();
-</script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Glitter / Pearl surface shader</title>
+    <style>
+      :root {
+        --ink: #12100c;
+        --ink-soft: #6b675e;
+        --rule: #dcd6c8;
+        --paper: #f4f0e6;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 24px 64px;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          14px/1.5 ui-sans-serif,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 840px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--ink-soft);
+        margin: 0 0 24px;
+        font-size: 13px;
+      }
+      .modes {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .modes button {
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        padding: 7px 16px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--ink-soft);
+        cursor: pointer;
+      }
+      .modes button[aria-pressed='true'] {
+        background: var(--ink);
+        color: var(--paper);
+        border-color: var(--ink);
+      }
+      #stage {
+        border-radius: 14px;
+        overflow: hidden;
+        line-height: 0;
+        transition: background 0.25s;
+        background: #0c0a06;
+      }
+      canvas {
+        width: 100%;
+        height: 460px;
+        display: block;
+        cursor: crosshair;
+      }
+      .panel {
+        margin-top: 20px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+      .ctl {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .ctl label {
+        flex: 0 0 132px;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+      .ctl input {
+        flex: 1;
+        accent-color: var(--ink);
+      }
+      .ctl output {
+        flex: 0 0 44px;
+        text-align: right;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .foot {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 24px;
+        flex-wrap: wrap;
+      }
+      .foot button {
+        font: inherit;
+        font-size: 12px;
+        padding: 7px 14px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .foot button:hover {
+        border-color: var(--ink);
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--ink-soft);
+        margin: 14px 0 0;
+      }
+      pre#dump {
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: #fff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        overflow: auto;
+        display: none;
+        white-space: pre-wrap;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #stage {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Glitter / Pearl</h1>
+      <p class="sub">
+        Move the pointer to place the light. It drifts on its own when the pointer leaves.
+      </p>
+
+      <div class="modes">
+        <button id="mDark" aria-pressed="true">Mineral &middot; #0C0A06</button>
+        <button id="mLight" aria-pressed="false">Pearl &middot; #FAF5EA</button>
+      </div>
+
+      <div id="stage"><canvas id="cv"></canvas></div>
+
+      <div class="panel" id="panel"></div>
+
+      <p class="hint">
+        Nacre swirl applies to the pearl theme only. In pearl mode, facet sharpness becomes sheen
+        tightness and grain density becomes lamellae frequency.
+      </p>
+
+      <div class="foot">
+        <button id="copyVals">Copy uniform values</button>
+        <button id="reset">Reset to defaults</button>
+        <button id="toggleDump">Show values</button>
+      </div>
+      <pre id="dump"></pre>
+    </main>
+
+    <script type="x-shader/x-fragment" id="fs">
+      // glitter-pearl.frag
+      // Dual-mode surface shader: dark glittering mineral / light pearlescent nacre.
+      // GLSL ES 1.00 (WebGL1). For WebGL2 / desktop GL, change `gl_FragColor` to an
+      // `out vec4` and add a `#version` directive.
+      //
+      // Draw a single fullscreen triangle or quad; this shader ignores vertex data
+      // and works purely from gl_FragCoord.
+      //
+      // ---------------------------------------------------------------------------
+      // UNIFORMS
+      // ---------------------------------------------------------------------------
+      // uRes     vec2   viewport size in pixels
+      // uTime    float  seconds since start
+      // uL       vec2   light / cursor position in aspect-corrected uv space,
+      //                 where uv = (fragCoord - 0.5*uRes) / uRes.y
+      //                 so y spans -0.5..0.5 and x spans -aspect/2..aspect/2
+      // uMode    float  0.0 = mineral (dark), 1.0 = pearl (light). Fractional values
+      //                 crossfade between the two composites.
+      //
+      // Shared controls (slider value / 100 unless noted):
+      // uTrans   float  0..1    white-glint transparency; 1 hides glints outside the band
+      // uRain    float  0..1    iridescence / rainbow strength
+      // uSpread  float  0.2..5  spectral band frequency; sets the ring radius
+      // uSwirl   float  0..2    nacre domain-warp magnitude (pearl mode only)
+      // uGlow    float  0..2    cursor halo intensity
+      // uBase    float  0..2.5  base body tone (darkens from cream in pearl mode)
+      // uCloud   float  0..1.5  broad mottling / clouding
+      // uGrain   float  30..700 fine speckle frequency (raw slider value, not /100)
+      // uDens    float  0..1    fraction of grid cells containing a facet
+      // uScale   float  15..220 facet grid frequency (raw slider value, not /100)
+      // uSharp   float  10..400 specular exponent (raw slider value, not /100);
+      //                 remapped to 2..22 for the pearl sheen
+      // uWhite   float  0..3.2  glint strength
+      //
+      // ---------------------------------------------------------------------------
+      // PALETTE
+      // ---------------------------------------------------------------------------
+      // The spectrum is a 7-stop cyclic ramp through the brand colors:
+      //   #D855F9  #FF4980  #FFC043  #EBFF0F  #CAF543  #00F7A3  #2BDCF6
+      // One unit of `brand()` input = one full rotation. Stops are evenly spaced in
+      // sevenths, not in OKLCH hue angle, so the ramp lingers in the yellow-green
+      // region where four stops cluster.
+      // ---------------------------------------------------------------------------
+
+      precision highp float;
+
+      uniform vec2  uRes;
+      uniform float uTime;
+      uniform vec2  uL;
+      uniform float uDens;
+      uniform float uScale;
+      uniform float uSharp;
+      uniform float uWhite;
+      uniform float uGrain;
+      uniform float uCloud;
+      uniform float uBase;
+      uniform float uGlow;
+      uniform float uRain;
+      uniform float uSpread;
+      uniform float uTrans;
+      uniform float uMode;
+      uniform float uSwirl;
+
+      // --- hashing ---------------------------------------------------------------
+
+      float h21(vec2 p){
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+      vec2 h22(vec2 p){
+        float a = h21(p);
+        float b = h21(p + a + 7.13);
+        return vec2(a, b);
+      }
+      vec3 h33(vec2 p){
+        float a = h21(p);
+        float b = h21(p + a + 3.71);
+        float c = h21(p + b + 9.13);
+        return vec3(a, b, c);
+      }
+
+      // --- brand spectrum --------------------------------------------------------
+      // Cyclic: brand(0.0) == brand(1.0) == purple. Chained mixes rather than a
+      // lookup table so it stays a pure function with no texture dependency.
+
+      vec3 brand(float x){
+        float h = fract(x) * 7.0;
+        vec3 c = vec3(0.847, 0.333, 0.976);                          // #D855F9
+        c = mix(c, vec3(1.000, 0.286, 0.502), clamp(h,       0.0, 1.0)); // #FF4980
+        c = mix(c, vec3(1.000, 0.753, 0.263), clamp(h - 1.0, 0.0, 1.0)); // #FFC043
+        c = mix(c, vec3(0.922, 1.000, 0.059), clamp(h - 2.0, 0.0, 1.0)); // #EBFF0F
+        c = mix(c, vec3(0.792, 0.961, 0.263), clamp(h - 3.0, 0.0, 1.0)); // #CAF543
+        c = mix(c, vec3(0.000, 0.969, 0.639), clamp(h - 4.0, 0.0, 1.0)); // #00F7A3
+        c = mix(c, vec3(0.169, 0.863, 0.965), clamp(h - 5.0, 0.0, 1.0)); // #2BDCF6
+        c = mix(c, vec3(0.847, 0.333, 0.976), clamp(h - 6.0, 0.0, 1.0)); // wrap
+        return c;
+      }
+
+      // --- noise -----------------------------------------------------------------
+
+      float vn(vec2 p){
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = h21(i);
+        float b = h21(i + vec2(1.0, 0.0));
+        float c = h21(i + vec2(0.0, 1.0));
+        float d = h21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+      float fbm(vec2 p){
+        float s = 0.0, a = 0.5;
+        for(int i = 0; i < 5; i++){ s += a * vn(p); p *= 2.03; a *= 0.5; }
+        return s;
+      }
+      float fbm3(vec2 p){
+        float s = 0.0, a = 0.5;
+        for(int i = 0; i < 3; i++){ s += a * vn(p); p *= 2.07; a *= 0.5; }
+        return s;
+      }
+
+      // Domain-warped field: one noise displaces the coordinates of another.
+      // This is what produces flowing nacre layers rather than isotropic blobs.
+      float pfield(vec2 p, float sw, float tt){
+        vec2 w = vec2(
+          fbm3(p * 1.25 + vec2(0.0,  tt * 0.030)),
+          fbm3(p * 1.25 + vec2(5.2, -tt * 0.022))
+        );
+        return fbm3(p * 2.3 + (w - 0.5) * sw * 3.2);
+      }
+
+      void main(){
+        vec2  uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+        float t  = uTime;
+
+        // --- cursor-relative spectral geometry -----------------------------------
+        vec2  dl  = uv - uL;
+        float gd  = length(dl);
+        vec2  rad = dl / max(gd, 0.0001);
+
+        // cyc counts full palette rotations outward from the cursor.
+        float cyc = gd * uSpread;
+
+        // Two-sided window: white inside cycle 1, one rainbow, white after cycle 2.
+        float band = smoothstep(0.78, 1.12, cyc) * (1.0 - smoothstep(1.88, 2.22, cyc));
+
+        // Opacity follows the same curve, so grains appear as they take on color.
+        float vis = mix(1.0, band, uTrans);
+
+        // Two-lobe halo: tight core plus wide falloff reads better than one gaussian.
+        float halo = exp(-gd * gd * 5.0) * 0.55 + exp(-gd * gd * 26.0) * 0.45;
+        float glow = halo * uGlow;
+
+        // --- shared surface fields -----------------------------------------------
+        float n1     = fbm(uv * 3.2);
+        float n2     = fbm(uv * 11.0 + n1 * 1.5);
+        float grain  = vn(uv * uGrain);
+        float grain2 = vn(uv * uGrain * 2.7 + 31.4);
+
+        float cw    = mix(0.62, 0.26, clamp(uCloud / 1.5, 0.0, 1.0));
+        float cl    = clamp(smoothstep(cw, 0.95, n2) * uCloud, 0.0, 1.0);
+        float bodyN = smoothstep(0.28, 0.78, n1);
+
+        // --- mineral body --------------------------------------------------------
+        vec3 dk = vec3(0.055, 0.052, 0.062);
+        vec3 md = vec3(0.200, 0.190, 0.215);
+        vec3 lt = vec3(0.400, 0.385, 0.400);
+
+        vec3 rockD = mix(mix(dk, md, bodyN) * uBase, lt, cl);
+        rockD *= 0.84 + 0.24 * grain + 0.10 * grain2;
+
+        // Relief normal from the fbm gradient. Shallow on purpose: the facets are
+        // meant to read as one plane, not as a displaced surface.
+        float e = 0.012;
+        vec2 slope = vec2(
+          fbm(uv * 11.0 + vec2(e, 0.0)) - fbm(uv * 11.0 - vec2(e, 0.0)),
+          fbm(uv * 11.0 + vec2(0.0, e)) - fbm(uv * 11.0 - vec2(0.0, e))
+        );
+        vec3 sn = normalize(vec3(-slope * 3.0, 1.0));
+
+        vec3  Lw   = normalize(vec3(uL - uv, 0.62));
+        float lamb = max(dot(sn, Lw), 0.0);
+        rockD *= 0.78 + 0.34 * lamb;
+
+        vec3 V = vec3(0.0, 0.0, 1.0);
+        vec3 H = normalize(Lw + V);
+
+        // --- facet glitter -------------------------------------------------------
+        // Single grid, one depth. Each cell holds a facet with a random tilt; it
+        // flares only when its normal bisects light and view. 3x3 neighborhood so
+        // grains can cross cell borders without popping.
+        vec2 gp = uv * uScale;
+        vec2 id = floor(gp);
+        vec2 gv = fract(gp) - 0.5;
+
+        vec3  sparkD = vec3(0.0);
+        float sparkI = 0.0;
+
+        for(int y = -1; y <= 1; y++){
+          for(int x = -1; x <= 1; x++){
+            vec2 o = vec2(float(x), float(y));
+            vec3 r = h33(id + o);
+
+            float alive = step(r.x, uDens);
+            vec2  cp    = o + (r.yz - 0.5) * 0.82;
+            float d     = length(gv - cp);
+            float core  = smoothstep(0.13, 0.0, d);
+
+            vec2 tl = (h22(id + o + 11.71) - 0.5) * 1.5;
+            tl += 0.05 * vec2(
+              sin(t * (0.5 + r.y * 1.3) + r.z * 21.0),
+              cos(t * (0.4 + r.z * 1.1) + r.y * 17.0)
+            );
+            vec3 n = normalize(vec3(tl, 0.72));
+
+            float sp = pow(max(dot(n, H), 0.0), uSharp) * (0.6 + r.z * 0.9);
+
+            // Hue: radial cycle, plus the facet's own tilt projected outward
+            // (the dispersion analog), plus a per-grain offset and slow drift.
+            float hue = (cyc - 1.0) + dot(tl, rad) * 0.14 + r.y * 0.10 - t * 0.02;
+
+            float bl = 0.22 * exp(-d * d * 90.0);
+            float w  = sp * (core + bl) * alive * vis;
+
+            sparkD += mix(vec3(1.0), brand(hue) * 1.25, uRain * band) * w;
+            sparkI += w;
+          }
+        }
+
+        // --- mineral composite (additive over near-black) -------------------------
+        vec3 colD = vec3(0.047, 0.039, 0.024) + rockD + sparkD * uWhite * (1.0 + glow * 1.1);
+        colD += vec3(0.70, 0.78, 1.00) * glow * 0.10;
+        colD += vec3(0.90, 0.93, 1.00) * 0.02 * lamb;
+        colD *= 1.0 - 0.42 * dot(uv, uv);
+        colD  = colD / (1.0 + colD * 0.85);   // Reinhard
+        colD  = pow(colD, vec3(0.82));
+
+        // --- pearl body ----------------------------------------------------------
+        // Different model, not an inversion: continuous thin-film interference over
+        // a soft warped normal, rather than sparse specular points.
+        float nac = pfield(uv, uSwirl, t);
+
+        float pe = 0.010;
+        float nx = fbm3((uv + vec2(pe, 0.0)) * 2.3) - fbm3((uv - vec2(pe, 0.0)) * 2.3);
+        float ny = fbm3((uv + vec2(0.0, pe)) * 2.3) - fbm3((uv - vec2(0.0, pe)) * 2.3);
+        vec3  Np = normalize(vec3(-vec2(nx, ny) * 4.5, 1.0));
+
+        // Anisotropic sample: stretched on x, tight on y, giving lamellae striations.
+        float lamin = vn(uv * vec2(3.0, uGrain * 0.55) + 11.0);
+
+        float ct        = max(dot(Np, H), 0.0);
+        float sheenExp  = mix(2.0, 22.0, clamp(uSharp / 400.0, 0.0, 1.0));
+        float sheen     = pow(ct, sheenExp);
+        float fres      = pow(1.0 - ct, 3.0);
+
+        vec3 cream = vec3(0.980, 0.961, 0.918);   // #FAF5EA
+
+        // Base sits at 0.90 of cream so the sheen has headroom to brighten into.
+        vec3 pb = cream * (0.900 + 0.060 * nac + 0.035 * lamin);
+        pb = mix(pb, pb * 0.80, bodyN * clamp(uBase, 0.0, 1.0));
+        pb = mix(pb, vec3(0.760, 0.740, 0.700), cl * 0.55);
+
+        // Interference phase: film thickness + view angle + striations + ring.
+        float phase = nac * 1.9 + fres * 1.4 + lamin * 0.30 + cyc * 0.28 - t * 0.03;
+
+        // 28% toward white is what makes this read as sheen rather than printed ink.
+        vec3 irid = mix(brand(phase), vec3(1.0), 0.28);
+
+        float ir = uRain * (0.20 + 0.80 * band) * (0.30 + 0.70 * sheen);
+        pb  = mix(pb, irid, clamp(ir * 0.62, 0.0, 1.0));
+        pb += vec3(0.10, 0.10, 0.095) * sheen * 0.55;
+
+        // Micro-shimmer: same facets, low alpha, tinted by the interference color.
+        float ma = clamp(sparkI * uWhite * (1.0 + glow * 1.1) * 0.8, 0.0, 1.0);
+        vec3  mt = mix(vec3(0.36, 0.35, 0.33), irid * 0.80, uRain * band);
+        pb = mix(pb, mt, ma * 0.50);
+
+        pb += vec3(0.030, 0.026, 0.016) * glow * 0.7;
+        pb *= 1.0 - 0.10 * dot(uv, uv);
+
+        // No tone mapping here: the Reinhard curve would crush cream to muddy tan.
+        vec3 colL = clamp(pb, 0.0, 1.0);
+
+        gl_FragColor = vec4(mix(colD, colL, uMode), 1.0);
+      }
+    </script>
+
+    <script>
+      (function () {
+        // name, label, min, max, step, default, uniform, divisor
+        var SPEC = [
+          ['trans', 'White transparency', 0, 100, 1, 82, 'uTrans', 100],
+          ['rain', 'Rainbow mix', 0, 100, 1, 100, 'uRain', 100],
+          ['spread', 'Spectrum spread', 20, 500, 5, 155, 'uSpread', 100],
+          ['swirl', 'Nacre swirl', 0, 200, 5, 200, 'uSwirl', 100],
+          ['glow', 'Cursor glow', 0, 200, 5, 0, 'uGlow', 100],
+          ['base', 'Stone gray', 0, 250, 5, 0, 'uBase', 100],
+          ['cloud', 'White clouding', 0, 150, 1, 0, 'uCloud', 100],
+          ['grain', 'Grain density', 30, 700, 10, 460, 'uGrain', 1],
+          ['dens', 'Glitter density', 2, 100, 1, 100, 'uDens', 100],
+          ['scale', 'Grain size', 15, 220, 1, 191, 'uScale', 1],
+          ['sharp', 'Facet sharpness', 10, 400, 5, 80, 'uSharp', 1],
+          ['white', 'Glint strength', 0, 320, 5, 320, 'uWhite', 100],
+        ];
+
+        var panel = document.getElementById('panel');
+        var inputs = {};
+        SPEC.forEach(function (s) {
+          var row = document.createElement('div');
+          row.className = 'ctl';
+          row.innerHTML =
+            '<label for="i_' +
+            s[0] +
+            '">' +
+            s[1] +
+            '</label>' +
+            '<input type="range" id="i_' +
+            s[0] +
+            '" min="' +
+            s[2] +
+            '" max="' +
+            s[3] +
+            '" step="' +
+            s[4] +
+            '" value="' +
+            s[5] +
+            '">' +
+            '<output id="o_' +
+            s[0] +
+            '">' +
+            s[5] +
+            '</output>';
+          panel.appendChild(row);
+          var el = row.querySelector('input');
+          var out = row.querySelector('output');
+          inputs[s[0]] = { el: el, out: out, spec: s };
+          el.addEventListener('input', function () {
+            out.value = el.value;
+            dumpVals();
+          });
+        });
+
+        var cv = document.getElementById('cv');
+        var gl = cv.getContext('webgl', { antialias: false, alpha: false });
+        if (!gl) {
+          document.getElementById('stage').innerHTML =
+            '<p style="color:#fff;padding:24px;line-height:1.5">WebGL is unavailable in this browser.</p>';
+          return;
+        }
+
+        var VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}';
+        var FS = document.getElementById('fs').textContent;
+
+        function compile(type, src) {
+          var sh = gl.createShader(type);
+          gl.shaderSource(sh, src);
+          gl.compileShader(sh);
+          if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+            console.error(gl.getShaderInfoLog(sh));
+          }
+          return sh;
+        }
+
+        var prog = gl.createProgram();
+        gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+          console.error(gl.getProgramInfoLog(prog));
+        }
+        gl.useProgram(prog);
+
+        var buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+        var loc = gl.getAttribLocation(prog, 'p');
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+        var U = {};
+        ['uRes', 'uTime', 'uL', 'uMode']
+          .concat(
+            SPEC.map(function (s) {
+              return s[6];
+            })
+          )
+          .forEach(function (k) {
+            U[k] = gl.getUniformLocation(prog, k);
+          });
+
+        var mode = 0;
+        var stage = document.getElementById('stage');
+        var mD = document.getElementById('mDark'),
+          mL = document.getElementById('mLight');
+        function setMode(m) {
+          mode = m;
+          stage.style.background = m ? '#FAF5EA' : '#0C0A06';
+          mD.setAttribute('aria-pressed', m ? 'false' : 'true');
+          mL.setAttribute('aria-pressed', m ? 'true' : 'false');
+          dumpVals();
+        }
+        mD.addEventListener('click', function () {
+          setMode(0);
+        });
+        mL.addEventListener('click', function () {
+          setMode(1);
+        });
+
+        var mx = 0,
+          my = 0,
+          hasPointer = false;
+        function track(e) {
+          var r = cv.getBoundingClientRect();
+          var pt = e.touches ? e.touches[0] : e;
+          mx = ((pt.clientX - r.left) / r.width - 0.5) * (r.width / r.height);
+          my = -((pt.clientY - r.top) / r.height - 0.5);
+          hasPointer = true;
+        }
+        cv.addEventListener('mousemove', track);
+        cv.addEventListener(
+          'touchmove',
+          function (e) {
+            track(e);
+            e.preventDefault();
+          },
+          { passive: false }
+        );
+        cv.addEventListener('mouseleave', function () {
+          hasPointer = false;
+        });
+        cv.addEventListener('touchend', function () {
+          hasPointer = false;
+        });
+
+        function resize() {
+          var dpr = Math.min(window.devicePixelRatio || 1, 2);
+          var w = Math.round(cv.clientWidth * dpr),
+            h = Math.round(cv.clientHeight * dpr);
+          if (cv.width !== w || cv.height !== h) {
+            cv.width = w;
+            cv.height = h;
+            gl.viewport(0, 0, w, h);
+          }
+        }
+
+        function values() {
+          var o = { uMode: mode };
+          SPEC.forEach(function (s) {
+            o[s[6]] = parseFloat(inputs[s[0]].el.value) / s[7];
+          });
+          return o;
+        }
+
+        var dump = document.getElementById('dump');
+        function dumpVals() {
+          if (dump.style.display === 'none') return;
+          dump.textContent = JSON.stringify(values(), null, 2);
+        }
+        document.getElementById('toggleDump').addEventListener('click', function () {
+          var on = dump.style.display === 'none';
+          dump.style.display = on ? 'block' : 'none';
+          this.textContent = on ? 'Hide values' : 'Show values';
+          dumpVals();
+        });
+        document.getElementById('copyVals').addEventListener('click', function () {
+          var btn = this;
+          navigator.clipboard.writeText(JSON.stringify(values(), null, 2)).then(
+            function () {
+              btn.textContent = 'Copied';
+              setTimeout(function () {
+                btn.textContent = 'Copy uniform values';
+              }, 1400);
+            },
+            function () {
+              btn.textContent = 'Copy failed — use Show values';
+              setTimeout(function () {
+                btn.textContent = 'Copy uniform values';
+              }, 2200);
+            }
+          );
+        });
+        document.getElementById('reset').addEventListener('click', function () {
+          SPEC.forEach(function (s) {
+            inputs[s[0]].el.value = s[5];
+            inputs[s[0]].out.value = s[5];
+          });
+          dumpVals();
+        });
+
+        var t0 = performance.now();
+        function frame() {
+          resize();
+          var t = (performance.now() - t0) / 1000;
+          var lx = hasPointer ? mx : Math.sin(t * 0.32) * 0.55;
+          var ly = hasPointer ? my : Math.cos(t * 0.23) * 0.3;
+
+          gl.uniform2f(U.uRes, cv.width, cv.height);
+          gl.uniform1f(U.uTime, t);
+          gl.uniform2f(U.uL, lx, ly);
+          gl.uniform1f(U.uMode, mode);
+          SPEC.forEach(function (s) {
+            gl.uniform1f(U[s[6]], parseFloat(inputs[s[0]].el.value) / s[7]);
+          });
+
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          requestAnimationFrame(frame);
+        }
+        frame();
+      })();
+    </script>
+  </body>
 </html>
