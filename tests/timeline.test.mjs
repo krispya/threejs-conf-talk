@@ -486,14 +486,49 @@ void test('navigation stops at the ends and supports named screens', (t) => {
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), benchmark);
   timeline.next();
+  const bridgeBenchmark = timelineEntity.targetFor(sim.ActiveScreen);
+  assert.equal(bridgeBenchmark.get(sim.Screen).id, 'math-three-benchmark');
+  assert.equal(bridgeBenchmark.get(sim.Screen).benchmarkVisible, true);
+  assert.equal(bridgeBenchmark.get(sim.Screen).benchmarkVariant, 'three');
+  assert.equal(bridgeBenchmark.get(sim.Screen).initiative, 'math');
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), benchmark);
+  assert.equal(benchmark.get(sim.Screen).benchmarkVariant, 'spider');
+  timeline.next();
+  timeline.next();
   const experimental = timelineEntity.targetFor(sim.ActiveScreen);
   assert.equal(experimental.get(sim.Screen).id, 'initiative-experimental');
   assert.equal(experimental.get(sim.Screen).initiative, 'experimental');
   assert.equal(experimental.get(sim.Screen).initiativesVisible, true);
   timeline.previous();
-  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), benchmark);
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), bridgeBenchmark);
   timeline.next();
   assert.equal(timelineEntity.targetFor(sim.ActiveScreen), experimental);
+  timeline.next();
+  const games = timelineEntity.targetFor(sim.ActiveScreen);
+  assert.equal(games.get(sim.Screen).id, 'initiative-games');
+  assert.equal(games.get(sim.Screen).initiative, 'games');
+  assert.equal(games.get(sim.Screen).initiativesVisible, true);
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), experimental);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), games);
+  assert.deepEqual(games.get(sim.Screen).initiativeChips, []);
+  timeline.next();
+  const gamesFeatures = timelineEntity.targetFor(sim.ActiveScreen);
+  assert.equal(gamesFeatures.get(sim.Screen).id, 'initiative-games-features');
+  assert.equal(gamesFeatures.get(sim.Screen).initiative, 'games');
+  assert.equal(gamesFeatures.get(sim.Screen).initiativesVisible, true);
+  assert.deepEqual(gamesFeatures.get(sim.Screen).initiativeChips, [
+    'crashcat',
+    'navcat',
+    'gpucat',
+    'more!',
+  ]);
+  timeline.previous();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), games);
+  timeline.next();
+  assert.equal(timelineEntity.targetFor(sim.ActiveScreen), gamesFeatures);
   timeline.next();
   const closing = timelineEntity.targetFor(sim.ActiveScreen);
   assert.equal(closing.get(sim.Screen).id, 'closing');

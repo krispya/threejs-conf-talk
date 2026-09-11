@@ -1,5 +1,4 @@
 import { Suspense } from 'react';
-import { BenchmarkRenderer } from './renderers/benchmark-renderer.js';
 import { CameraRenderer } from './renderers/camera-renderer.js';
 import { ClosingRenderer } from './renderers/closing-renderer.js';
 import { CodeComparisonRenderer } from './renderers/code-comparison-renderer.js';
@@ -38,7 +37,6 @@ export function Renderers() {
       </Suspense>
       <Suspense fallback={null}>
         <ClosingRenderer />
-        <BenchmarkRenderer />
       </Suspense>
     </>
   );

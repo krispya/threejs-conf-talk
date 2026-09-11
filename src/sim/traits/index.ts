@@ -55,6 +55,7 @@ export const Screen = trait({
   /** Initiative previewed inside the stone portal, by id */
   initiative: '',
   benchmarkVisible: false,
+  benchmarkVariant: 'spider' as 'spider' | 'three',
   closingVisible: false,
 });
 export const ScreenTransition = trait({
