@@ -46,7 +46,7 @@ import { portalFallMotion } from '../../sim/portal-fall.js';
 import { brand, fonts, ramp } from '../../theme.js';
 import { withMeshopt } from '../load-gltf.js';
 import { initiativeCover } from '../initiative-cover.js';
-import { initiativeSky } from '../initiative-sky.js';
+import { createInitiativeSky } from '../initiative-sky.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { warmUp } from '../warm-up.js';
 import { BenchmarkRenderer } from './benchmark-renderer.js';
@@ -102,6 +102,7 @@ export function InitiativeRenderer() {
   const camera = useThree((state) => state.camera);
   const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
+  const dpr = useThree((state) => state.viewport.dpr);
   const mesh = useRef<Mesh>(null);
   const lens = useRef<{ camera: PerspectiveCamera; fov: number } | null>(null);
   const arrival = useRef({ inside: false, startedAt: 0 });
@@ -113,6 +114,8 @@ export function InitiativeRenderer() {
     const lamp = new PointLight('#d38aff', 22, 6, 2);
     lamp.position.set(0.1, -0.3, -0.25);
     lamp.castShadow = true;
+    // Nothing that casts a shadow moves except the grass sway, so both maps render once
+    lamp.shadow.autoUpdate = false;
     lamp.shadow.mapSize.set(1024, 1024);
     lamp.shadow.camera.near = 0.05;
     lamp.shadow.camera.far = 6;
@@ -122,6 +125,7 @@ export function InitiativeRenderer() {
     const moon = new DirectionalLight('#c5c6cd', 1.05);
     moon.position.set(-3, 5, 6);
     moon.castShadow = true;
+    moon.shadow.autoUpdate = false;
     moon.shadow.mapSize.set(2048, 2048);
     // Fit the shadow camera to the ring and the grassy approach
     Object.assign(moon.shadow.camera, {
@@ -168,12 +172,13 @@ export function InitiativeRenderer() {
     };
   });
   useLayoutEffect(() => {
-    resources.target.setSize(size.width, size.height);
+    // The glade renders at the drawing buffer size so the composite samples it one to one
+    resources.target.setSize(Math.round(size.width * dpr), Math.round(size.height * dpr));
     // The preview camera is independent of the presentation camera
     // oxlint-disable-next-line react/immutability
     resources.camera.aspect = size.width / size.height;
     resources.camera.updateProjectionMatrix();
-  }, [resources, size.width, size.height]);
+  }, [resources, size.width, size.height, dpr]);
   useEffect(
     () => () => {
       resources.target.dispose();
@@ -244,21 +249,24 @@ export function InitiativeRenderer() {
     glade.grass.receiveShadow = true;
     return glade;
   }, [portal, resources]);
-  const sky = useMemo(
-    () =>
-      initiativeSky(stars, glade.phase).mul(
-        vec4(resources.skyReveal, resources.skyReveal, resources.skyReveal, 1)
-      ),
-    [stars, glade, resources]
+  const sky = useMemo(() => createInitiativeSky(stars, glade.phase), [stars, glade]);
+  useEffect(() => () => sky.dispose(), [sky]);
+  const skyNode = useMemo(
+    () => sky.node.mul(vec4(resources.skyReveal, resources.skyReveal, resources.skyReveal, 1)),
+    [sky, resources]
   );
   useLayoutEffect(() => {
-    // oxlint-disable-next-line react/immutability
-    resources.scene.backgroundNode = sky;
+    /* oxlint-disable react/immutability */
+    resources.scene.backgroundNode = skyNode;
     resources.scene.add(portal, glade.group);
+    // The frozen shadow maps must include the stones and the grass
+    resources.lamp.shadow.needsUpdate = true;
+    resources.moon.shadow.needsUpdate = true;
+    /* oxlint-enable react/immutability */
     return () => {
       resources.scene.remove(portal, glade.group);
     };
-  }, [resources, portal, glade, sky]);
+  }, [resources, portal, glade, skyNode]);
   useEffect(() => () => disposeInitiativeGlade(glade), [glade]);
   useEffect(
     () => () => {
@@ -504,6 +512,7 @@ export function InitiativeRenderer() {
       const alpha = renderer.getClearAlpha();
       renderer.getClearColor(resources.clearColor);
       try {
+        sky.render(renderer, resources.camera, resources.target.width, resources.target.height);
         renderer.setRenderTarget(resources.target);
         renderer.autoClear = true;
         renderer.render(resources.scene, resources.camera);
