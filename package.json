@@ -17,6 +17,7 @@
     "bake:glyph": "node scripts/bake-glyph.mjs",
     "bake:math": "node scripts/bake-math.mjs",
     "bake:experimental": "node scripts/bake-experimental.mjs",
+    "bake:games": "node scripts/bake-games.mjs",
     "bake:design-system": "node scripts/bake-design-system.mjs",
     "bake:r3f-v10": "node scripts/bake-r3f-v10.mjs",
     "bake:robot": "pnpm dlx @gltf-transform/cli@4.5.0 optimize reference/robot_emoji_apple/scene.gltf public/meshes/robot_emoji_apple/scene.glb --compress meshopt --simplify false --palette false --prune-solid-textures false",
