@@ -189,6 +189,27 @@ function TitleView({ entity }: { entity: Entity }) {
         .mul(portal.outside),
     };
   }, [speed, letterOpacity, portal.outside]);
+  // Nodes built during render are new objects every time, and a new node rebuilds its shader
+  const faces = useMemo(
+    () => ({
+      steadyMask: portal.mask.and(glitch.mask.not()),
+      glitchMask: portal.mask.and(glitch.mask),
+      echoOpacity: wireMaterial.faceOpacity.mul(0.5),
+      signalOpacity: wireMaterial.faceOpacity.mul(glitch.signal),
+    }),
+    [portal.mask, glitch, wireMaterial]
+  );
+  const scrimMaterial = useMemo(
+    () => ({
+      color: color(brand.green).mul(
+        smoothstep(0.35, 1.35, uv().sub(0.5).mul(2).length()).mul(-0.85).add(1)
+      ),
+      vertex: vec4(positionLocal.xy, 0, 1),
+      depth: float(1),
+      opacity: scrim.mul(opacity).mul(0.54),
+    }),
+    [scrim, opacity]
+  );
   const lines = useMemo(
     () =>
       text.split('\n').map((line) => {
@@ -324,7 +345,7 @@ function TitleView({ entity }: { entity: Entity }) {
                 <meshBasicNodeMaterial
                   color="#000000"
                   opacityNode={wireMaterial.faceOpacity}
-                  maskNode={portal.mask.and(glitch.mask.not())}
+                  maskNode={faces.steadyMask}
                   transparent
                   toneMapped={false}
                 />
@@ -333,8 +354,8 @@ function TitleView({ entity }: { entity: Entity }) {
                 <meshBasicNodeMaterial
                   color={brand.red}
                   vertexNode={glitch.echoVertex}
-                  opacityNode={wireMaterial.faceOpacity.mul(0.5)}
-                  maskNode={portal.mask.and(glitch.mask)}
+                  opacityNode={faces.echoOpacity}
+                  maskNode={faces.glitchMask}
                   transparent
                   depthWrite={false}
                   toneMapped={false}
@@ -344,8 +365,8 @@ function TitleView({ entity }: { entity: Entity }) {
                 <meshBasicNodeMaterial
                   color={brand.blue}
                   vertexNode={glitch.cyanVertex}
-                  opacityNode={wireMaterial.faceOpacity.mul(0.5)}
-                  maskNode={portal.mask.and(glitch.mask)}
+                  opacityNode={faces.echoOpacity}
+                  maskNode={faces.glitchMask}
                   transparent
                   depthWrite={false}
                   toneMapped={false}
@@ -355,8 +376,8 @@ function TitleView({ entity }: { entity: Entity }) {
                 <meshBasicNodeMaterial
                   color="#000000"
                   vertexNode={glitch.vertex}
-                  opacityNode={wireMaterial.faceOpacity.mul(glitch.signal)}
-                  maskNode={portal.mask.and(glitch.mask)}
+                  opacityNode={faces.signalOpacity}
+                  maskNode={faces.glitchMask}
                   transparent
                   depthWrite={false}
                   toneMapped={false}
@@ -396,12 +417,10 @@ function TitleView({ entity }: { entity: Entity }) {
         <planeGeometry args={[2, 2]} />
         {/* Clear the background depth so flying objects stay behind the foreground. */}
         <meshBasicNodeMaterial
-          colorNode={color(brand.green).mul(
-            smoothstep(0.35, 1.35, uv().sub(0.5).mul(2).length()).mul(-0.85).add(1)
-          )}
-          vertexNode={vec4(positionLocal.xy, 0, 1)}
-          depthNode={float(1)}
-          opacityNode={scrim.mul(opacity).mul(0.54)}
+          colorNode={scrimMaterial.color}
+          vertexNode={scrimMaterial.vertex}
+          depthNode={scrimMaterial.depth}
+          opacityNode={scrimMaterial.opacity}
           transparent
           depthTest={false}
           depthWrite

@@ -2,7 +2,7 @@ import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import { useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
-import { type ComponentRef, useRef, useState } from 'react';
+import { type ComponentRef, useLayoutEffect, useRef, useState } from 'react';
 import { uniform } from 'three/tsl';
 import { SRGBColorSpace, type Group } from 'three/webgpu';
 import { allProfiles, type ProfileLogin } from '../../data/profiles.js';
@@ -31,6 +31,10 @@ export function InitiativeFeatureChip({
   const text = useRef<ComponentRef<typeof Text>>(null);
   const entrance = useRef(0);
   const [opacity] = useState(() => uniform(0));
+  // Chips keep their meshes and shaders between screens, so a new label restarts the entrance
+  useLayoutEffect(() => {
+    entrance.current = 0;
+  }, [children, profile]);
 
   useFrame(
     (_, delta) => {

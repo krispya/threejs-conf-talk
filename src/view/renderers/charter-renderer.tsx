@@ -52,6 +52,7 @@ function CharterView({ entity }: { entity: Entity }) {
   }, [canvas]);
   useEffect(() => resetCursor, [resetCursor, visible]);
   const opacity = useMemo(() => smoothstep(0, 0.08, progress), [progress]);
+  const rule = useMemo(() => opacity.mul(0.18), [opacity]);
   const material = useMemo(
     () =>
       defineTextMaterial((context) => {
@@ -143,7 +144,7 @@ function CharterView({ entity }: { entity: Entity }) {
                 <planeGeometry args={[35.6, 0.035]} />
                 <meshBasicNodeMaterial
                   color={brand.dark}
-                  opacityNode={opacity.mul(0.18)}
+                  opacityNode={rule}
                   transparent
                   depthWrite={false}
                   toneMapped={false}
@@ -265,14 +266,21 @@ function PaperPanel({ children, opacity }: { children: ReactNode; opacity: Node<
 
 /** A soft trough and a fine highlight leave a crease after the fold opens. */
 function Crease({ opacity }: { opacity: Node<'float'> }) {
-  const shadow = useMemo(() => uv().y.oneMinus().mul(-6).exp().mul(0.18).mul(opacity), [opacity]);
+  const crease = useMemo(
+    () => ({
+      shadow: uv().y.oneMinus().mul(-6).exp().mul(0.18).mul(opacity),
+      line: opacity.mul(0.14),
+      highlight: opacity.mul(0.7),
+    }),
+    [opacity]
+  );
   return (
     <>
       <mesh position={[0, -0.35, 0]} renderOrder={5}>
         <planeGeometry args={[40, 0.7]} />
         <meshBasicNodeMaterial
           color={brand.dark}
-          opacityNode={shadow}
+          opacityNode={crease.shadow}
           transparent
           depthWrite={false}
           toneMapped={false}
@@ -282,7 +290,7 @@ function Crease({ opacity }: { opacity: Node<'float'> }) {
         <planeGeometry args={[40, 0.035]} />
         <meshBasicNodeMaterial
           color={brand.dark}
-          opacityNode={opacity.mul(0.14)}
+          opacityNode={crease.line}
           transparent
           depthWrite={false}
           toneMapped={false}
@@ -292,7 +300,7 @@ function Crease({ opacity }: { opacity: Node<'float'> }) {
         <planeGeometry args={[40, 0.035]} />
         <meshBasicNodeMaterial
           color="#ffffff"
-          opacityNode={opacity.mul(0.7)}
+          opacityNode={crease.highlight}
           transparent
           depthWrite={false}
           toneMapped={false}

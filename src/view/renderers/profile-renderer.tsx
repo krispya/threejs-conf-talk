@@ -1,8 +1,8 @@
-import { useFrame, useTexture } from '@react-three/fiber/webgpu';
+import { useFrame, useTexture, useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { useQuery, useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { color, mix, texture as textureNode, uniform } from 'three/tsl';
 import {
   Color,
@@ -11,7 +11,7 @@ import {
   type MeshBasicMaterial,
   type MeshBasicNodeMaterial,
 } from 'three/webgpu';
-import { profiles } from '../../data/profiles.js';
+import { allProfiles } from '../../data/profiles.js';
 import {
   Anchor,
   ActiveScreen,
@@ -29,7 +29,7 @@ import { ramp } from '../../theme.js';
 import { useEntityVisible } from '../use-entity-visible.js';
 import { ProfileAura } from './profile-aura.js';
 
-for (const profile of profiles) useTexture.preload(profile.avatar);
+for (const profile of allProfiles) useTexture.preload(profile.avatar);
 
 // Ring colors for a portrait in front and one that has receded behind the newcomers
 const light = new Color(ramp['light-25']);
@@ -55,6 +55,11 @@ function ProfileView({ entity, timeline }: { entity: Entity; timeline: Entity | 
   const texture = useTexture(avatar, (texture) => {
     texture.colorSpace = SRGBColorSpace;
   });
+  // Decode and upload the portrait ahead of the frame the contributors first appear on
+  const renderer = useThree((state) => state.renderer);
+  useEffect(() => {
+    if (renderer.hasInitialized()) renderer.initTexture(texture);
+  }, [renderer, texture]);
   // Receded portraits sink toward the backdrop so the portraits in front stay the bright ones
   const [dim] = useState(() => uniform(0));
   const portraitColor = useMemo(() => {

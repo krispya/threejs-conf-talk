@@ -24,6 +24,7 @@ export function BenchmarkRenderer() {
     duration: visible ? 0.5 : 0.4,
     clock: 'frames',
   });
+  const backing = useMemo(() => reveal.mul(0.96), [reveal]);
   const root = useRef<Group>(null);
 
   useFrame(
@@ -45,7 +46,7 @@ export function BenchmarkRenderer() {
         <circleGeometry args={[3.35, 96]} />
         <meshBasicNodeMaterial
           color="#08070d"
-          opacityNode={reveal.mul(0.96)}
+          opacityNode={backing}
           transparent
           depthTest={false}
           depthWrite={false}

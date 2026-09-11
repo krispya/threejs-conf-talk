@@ -45,6 +45,7 @@ import { portalArrivalLighting, portalConjureMotion } from '../../sim/portal-con
 import { portalFallMotion } from '../../sim/portal-fall.js';
 import { brand, fonts, ramp } from '../../theme.js';
 import { withMeshopt } from '../load-gltf.js';
+import { initiativeCover } from '../initiative-cover.js';
 import { initiativeSky } from '../initiative-sky.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { warmUp } from '../warm-up.js';
@@ -54,6 +55,7 @@ import { InitiativeFeatureChip } from './initiative-feature-chip.js';
 import { createInitiativeGlade, disposeInitiativeGlade } from './initiative-glade.js';
 
 useLoader.preload(GLTFLoader, './meshes/magic_portal/scene.glb', withMeshopt);
+useLoader.preload(TextureLoader, './sky/hyg-stars.png');
 
 /** A warp into a glade where an ancient stone portal will preview each initiative. */
 export function InitiativeRenderer() {
@@ -183,7 +185,7 @@ export function InitiativeRenderer() {
   const mediaRef = useRef<ReturnType<typeof createInitiativeMedia> | null>(null);
   // Media resources live on commit so their video frame callbacks survive remounts
   useEffect(() => {
-    const media = createInitiativeMedia();
+    const media = createInitiativeMedia(initiatives.map((entry) => entry.video));
     mediaRef.current = media;
     resources.scene.add(media.mesh);
     return () => {
@@ -323,6 +325,7 @@ export function InitiativeRenderer() {
       .add(0.5)
       .pow(12);
     return {
+      vertex: vec4(positionLocal.xy.mul(2), 0, 1),
       color: mix(
         color('#18152f'),
         texture(
@@ -360,6 +363,9 @@ export function InitiativeRenderer() {
         lens.current = null;
       }
       mesh.current.visible = fallingNow || insideNow || opacity.value > 0;
+      // The preview is opaque across the whole frame once the glade is reached and faded in
+      // oxlint-disable-next-line react/immutability
+      initiativeCover.value = insideNow && !fallingNow && opacity.value >= 1 ? 1 : 0;
       const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0);
       const arrivalElapsed = world.get(Time)!.elapsed - arrival.current.startedAt;
       const conjure = insideNow ? portalConjureMotion(arrivalElapsed) : null;
@@ -521,7 +527,7 @@ export function InitiativeRenderer() {
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicNodeMaterial
-          vertexNode={vec4(positionLocal.xy.mul(2), 0, 1)}
+          vertexNode={nodes.vertex}
           colorNode={nodes.color}
           opacityNode={nodes.opacity}
           transparent
@@ -615,7 +621,7 @@ export function InitiativeRenderer() {
           <group ref={chipColumn}>
             {chips.map((chip, index) => (
               <InitiativeFeatureChip
-                key={`${data?.id}:${chip.label}`}
+                key={index}
                 index={index}
                 width={chipsWidth}
                 count={chips.length}

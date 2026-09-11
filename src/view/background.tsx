@@ -1,6 +1,6 @@
-import { useThree } from '@react-three/fiber/webgpu';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import { useQueryFirst, useTarget, useTrait } from 'koota/react';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Fn,
   If,
@@ -21,14 +21,17 @@ import {
   vec2,
   vec4,
 } from 'three/tsl';
-import { NoToneMapping } from 'three/webgpu';
+import { Group, NoToneMapping } from 'three/webgpu';
 import { ActiveScreen, Screen, Timeline } from '../sim/index.js';
 import { backdrop, brand } from '../theme.js';
 import { useTransitionOpacity } from './use-transition-opacity.js';
 import { useShowreel } from './use-showreel.js';
 import { bakeNebula, starfieldNode } from './starfield.js';
+import { initiativeCover } from './initiative-cover.js';
 import { usePortal } from './use-portal.js';
 import { usePortalRipples } from './use-portal-ripples.js';
+import { useTransmissionBackdrop } from './glass/transmission-backdrop-provider.js';
+import { warmUp } from './warm-up.js';
 
 // TSL nodes are loosely typed; `any` keeps the shader readable.
 /* oxlint-disable typescript/no-explicit-any */
@@ -193,6 +196,8 @@ const backdropNode = Fn(() => {
 export function Background() {
   const scene = useThree((state) => state.scene);
   const renderer = useThree((state) => state.renderer);
+  const camera = useThree((state) => state.camera);
+  const capture = useTransmissionBackdrop();
   const shader = backdropNode;
   // The nebula bakes once and the star shader samples it for the rest of the session
   const [nebula] = useState(() => bakeNebula(renderer));
@@ -214,13 +219,16 @@ export function Background() {
         const field = vec4(0).toVar();
         // Hold the pastel shapes through more of the pullback before revealing the stars
         const starMix = stars.pow(3);
-        // Retain both styles while skipping the inactive background's fragment work
-        If(stars.lessThan(1), () => {
-          field.addAssign(shader().mul(starMix.oneMinus()));
-        });
-        If(stars.greaterThan(0), () => {
-          const sky = starsShader();
-          field.addAssign(vec4(sky.rgb.mul(ripples.light.add(1)), sky.a).mul(starMix));
+        // Retain both styles while skipping the inactive background's fragment work, and skip
+        // all of it while the initiative preview is opaque across the frame
+        If(initiativeCover.lessThan(1), () => {
+          If(stars.lessThan(1), () => {
+            field.addAssign(shader().mul(starMix.oneMinus()));
+          });
+          If(stars.greaterThan(0), () => {
+            const sky = starsShader();
+            field.addAssign(vec4(sky.rgb.mul(ripples.light.add(1)), sky.a).mul(starMix));
+          });
         });
         return mix(vec4(color(backdrop.top), 1), field, opacity);
       })(),
@@ -257,26 +265,41 @@ export function Background() {
     [background, portalProgress, angle, distance, energy, edge, aperture]
   );
 
-  const composed = useMemo(
-    () =>
+  // Each backdrop style keeps one node for the whole talk, so switching styles reuses shaders
+  // that were compiled ahead instead of rebuilding them mid transition
+  const variants = useMemo(() => {
+    const compose = (style: N) =>
       Fn(() => {
-        const base = vec4(
-          data?.warpVisible
-            ? portal
-            : closing
-              ? color(brand.blue)
-              : solid
-                ? color(brand.green)
-                : background
-        ).toVar();
+        const base = vec4(style).toVar();
         If(reel.opacity.greaterThan(0), () => {
           const video = reel.source.node.rgb.mul(reel.blackout.oneMinus());
           base.assign(mix(base, vec4(video, 1), reel.opacity));
         });
         return base;
-      })(),
-    [data?.warpVisible, portal, closing, solid, background, reel]
-  );
+      })();
+    return {
+      warp: compose(portal),
+      closing: compose(color(brand.blue)),
+      solid: compose(color(brand.green)),
+      pastel: compose(background),
+    };
+  }, [portal, background, reel]);
+  const composed =
+    variants[data?.warpVisible ? 'warp' : closing ? 'closing' : solid ? 'solid' : 'pastel'];
+  const warmed = useRef<typeof variants | null>(null);
+  useFrame(() => {
+    if (warmed.current === variants || !renderer.hasInitialized()) return;
+    warmed.current = variants;
+    const probe = new Group();
+    for (const variant of Object.values(variants)) {
+      /* oxlint-disable react/immutability */
+      scene.backgroundNode = variant;
+      void warmUp(renderer, probe, camera, scene);
+      void warmUp(renderer, probe, camera, scene, capture.cleanTarget);
+    }
+    scene.backgroundNode = composed;
+    /* oxlint-enable react/immutability */
+  });
 
   /* oxlint-disable react/immutability */
   useLayoutEffect(() => {

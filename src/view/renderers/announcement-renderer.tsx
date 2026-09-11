@@ -30,6 +30,7 @@ export function AnnouncementRenderer() {
   const source = image.image as HTMLImageElement;
   const height = (24 * source.height) / source.width;
   const opacity = useMemo(() => smoothstep(0, 0.12, progress), [progress]);
+  const shadow = useMemo(() => opacity.mul(0.2), [opacity]);
   const gold = useMemo(() => color('#d7bb81').mul(normalView.z.abs().mul(0.32).add(0.68)), []);
   const root = useRef<Group>(null);
   const sheet = useRef<Group>(null);
@@ -62,7 +63,7 @@ export function AnnouncementRenderer() {
           <boxGeometry args={[26.8, height + 2.8, 0.18]} />
           <meshBasicNodeMaterial
             color="#30253b"
-            opacityNode={opacity.mul(0.2)}
+            opacityNode={shadow}
             transparent
             depthWrite={false}
           />

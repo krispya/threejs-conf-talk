@@ -43,8 +43,15 @@ function createClip() {
  * an energy rim that spills over the stones. The disc is fitted to the ring's inner edge and
  * reaches past it so the glow has room.
  */
-export function createInitiativeMedia() {
-  const clips = [createClip()];
+export function createInitiativeMedia(preload: readonly string[] = []) {
+  // Every clip starts fetching at once so a later initiative never waits on the network
+  const clips = preload.map((url) => {
+    const clip = createClip();
+    clip.video.src = url;
+    clip.video.load();
+    return clip;
+  });
+  if (!clips.length) clips.push(createClip());
   let active = clips[0];
   let pending: ReturnType<typeof createClip> | null = null;
   const map = texture(active.map);

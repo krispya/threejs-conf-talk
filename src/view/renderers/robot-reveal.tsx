@@ -98,6 +98,10 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
   const [swirl] = useState(() => uniform(0));
   const [spin] = useState(() => uniform(0));
   const [spread] = useState(() => uniform(0));
+  // Material numbers become part of the shader cache key, so the surface animates through
+  // uniforms instead of rebuilding its shader when metalness reaches zero
+  const [metalness] = useState(() => uniform(0.7));
+  const [roughness] = useState(() => uniform(0.32));
   const model = useMemo(() => {
     const scene = gltf.scene.clone(true);
     const materials: MeshStandardNodeMaterial[] = [];
@@ -133,6 +137,8 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
         toneMapped: false,
       });
       material.opacityNode = opacity;
+      material.metalnessNode = metalness;
+      material.roughnessNode = roughness;
       material.colorNode = mix(color('#485361'), surface, friendly);
       // The teammate keeps its texture colors with only a soft hint of shape at the edges
       material.emissiveNode = surface.mul(normalView.z.clamp(0, 1).mul(0.15).add(0.85)).mul(friendly);
@@ -156,7 +162,7 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
       rim,
       fill,
     };
-  }, [gltf, opacity, friendly]);
+  }, [gltf, opacity, friendly, metalness, roughness]);
   useEffect(
     () => () => {
       model.materials.forEach((material) => material.dispose());
@@ -164,6 +170,40 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
     },
     [model]
   );
+  // Nodes built during render are new objects every time, and a new node rebuilds its shader
+  const eye = useMemo(() => {
+    const radial = uv().sub(0.5).mul(2).length();
+    return {
+      halo: radial
+        .pow(2)
+        .mul(-7)
+        .exp()
+        .mul(smoothstep(1, 0.65, radial))
+        .mul(fault)
+        .mul(0.72),
+      pupilColor: color(community ? '#ff2014' : '#ffd8c5').mul(1.5),
+      pupilPosition: positionLocal.mul(fault.mul(0.5).add(1)),
+      pupilOpacity: eyes.mul(smoothstep(1, 0.78, radial)),
+      glow: radial
+        .mul(mix(-9, -5, fault))
+        .exp()
+        .mul(smoothstep(1, 0.65, radial))
+        .mul(eyes)
+        .mul(fault.mul(1.8).add(2.2)),
+      spiral: hypnoticSpiral(swirl, spin, spread),
+      flare: uv()
+        .sub(0.5)
+        .mul(2)
+        .abs()
+        .oneMinus()
+        .clamp()
+        .pow(2)
+        .x.mul(uv().y.sub(0.5).abs().mul(-18).exp())
+        .mul(flare),
+      beam: uv().y.sub(0.5).mul(2).pow(2).mul(-5).exp().mul(laser).mul(0.8),
+      beamCore: uv().y.sub(0.5).abs().mul(2).oneMinus().mul(laser),
+    };
+  }, [community, fault, eyes, flare, laser, swirl, spin, spread]);
 
   useLayoutEffect(() => {
     const entering = visible && motion.current.target === 0;
@@ -281,10 +321,8 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
       model.uplight.intensity = 8 * face * (1 - friendly.value);
       model.rim.intensity = 3 * face * (1 - friendly.value);
       model.fill.intensity = 0.25 * face * (1 - friendly.value);
-      for (const material of model.materials) {
-        material.metalness = lerp(0.7, 0, friendly.value);
-        material.roughness = lerp(0.32, 1, friendly.value);
-      }
+      metalness.value = lerp(0.7, 0, friendly.value);
+      roughness.value = lerp(0.32, 1, friendly.value);
       // A brief double flicker interrupts long friendly holds after the robot joins the network.
       const awake = elapsed - (data?.robotJoinDelay ?? 0) - 3.6;
       const cycle = awake % 7.6;
@@ -358,16 +396,7 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
                 <planeGeometry args={[3.6, 3.6]} />
                 <meshBasicNodeMaterial
                   color="#ff1608"
-                  opacityNode={uv()
-                    .sub(0.5)
-                    .mul(2)
-                    .length()
-                    .pow(2)
-                    .mul(-7)
-                    .exp()
-                    .mul(smoothstep(1, 0.65, uv().sub(0.5).mul(2).length()))
-                    .mul(fault)
-                    .mul(0.72)}
+                  opacityNode={eye.halo}
                   transparent
                   depthTest={false}
                   depthWrite={false}
@@ -378,9 +407,9 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
             <mesh renderOrder={-11}>
               <circleGeometry args={[0.22, 48]} />
               <meshBasicNodeMaterial
-                colorNode={color(community ? '#ff2014' : '#ffd8c5').mul(1.5)}
-                positionNode={positionLocal.mul(fault.mul(0.5).add(1))}
-                opacityNode={eyes.mul(smoothstep(1, 0.78, uv().sub(0.5).mul(2).length()))}
+                colorNode={eye.pupilColor}
+                positionNode={eye.pupilPosition}
+                opacityNode={eye.pupilOpacity}
                 transparent
                 depthWrite={false}
                 toneMapped={false}
@@ -390,15 +419,7 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
               <planeGeometry args={[2.8, 2.8]} />
               <meshBasicNodeMaterial
                 color="#ff3426"
-                opacityNode={uv()
-                  .sub(0.5)
-                  .mul(2)
-                  .length()
-                  .mul(mix(-9, -5, fault))
-                  .exp()
-                  .mul(smoothstep(1, 0.65, uv().sub(0.5).mul(2).length()))
-                  .mul(eyes)
-                  .mul(fault.mul(1.8).add(2.2))}
+                opacityNode={eye.glow}
                 blending={AdditiveBlending}
                 transparent
                 depthWrite={false}
@@ -410,7 +431,7 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
                 <planeGeometry args={[2.2, 2.2]} />
                 <meshBasicNodeMaterial
                   color="#ffa878"
-                  opacityNode={hypnoticSpiral(swirl, spin, spread)}
+                  opacityNode={eye.spiral}
                   blending={AdditiveBlending}
                   transparent
                   depthWrite={false}
@@ -422,15 +443,7 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
               <planeGeometry args={[8, 0.24]} />
               <meshBasicNodeMaterial
                 color="#ff5b41"
-                opacityNode={uv()
-                  .sub(0.5)
-                  .mul(2)
-                  .abs()
-                  .oneMinus()
-                  .clamp()
-                  .pow(2)
-                  .x.mul(uv().y.sub(0.5).abs().mul(-18).exp())
-                  .mul(flare)}
+                opacityNode={eye.flare}
                 blending={AdditiveBlending}
                 transparent
                 depthWrite={false}
@@ -450,7 +463,7 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
                   <planeGeometry />
                   <meshBasicNodeMaterial
                     color="#ff1008"
-                    opacityNode={uv().y.sub(0.5).mul(2).pow(2).mul(-5).exp().mul(laser).mul(0.8)}
+                    opacityNode={eye.beam}
                     transparent
                     depthTest={false}
                     depthWrite={false}
@@ -461,7 +474,7 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
                   <planeGeometry />
                   <meshBasicNodeMaterial
                     color="#fff0dc"
-                    opacityNode={uv().y.sub(0.5).abs().mul(2).oneMinus().mul(laser)}
+                    opacityNode={eye.beamCore}
                     blending={AdditiveBlending}
                     transparent
                     depthTest={false}

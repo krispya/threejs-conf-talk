@@ -4,7 +4,7 @@ import { easing } from 'math/time';
 import { Suspense, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { color, mix, pass, screenUV, uniform, vec4 } from 'three/tsl';
-import { RenderPipeline, Scene, type Group } from 'three/webgpu';
+import { NodeUpdateType, RenderPipeline, Scene, type Group } from 'three/webgpu';
 import { ActiveScreen, Screen, ScreenTransition, Timeline } from '../sim/index.js';
 import { ramp } from '../theme.js';
 import { CharterRenderer } from './renderers/charter-renderer.js';
@@ -13,6 +13,7 @@ import { GreetingRenderer } from './renderers/greeting-renderer.js';
 import { HistoryRenderer } from './renderers/history-renderer.js';
 import { PrinciplesRenderer } from './renderers/principles-renderer.js';
 import { useTransitionOpacity } from './use-transition-opacity.js';
+import { warmUp } from './warm-up.js';
 
 /** Composite foreground screens over the scene, with a soft focus for the greeting. */
 export function GreetingLayer() {
@@ -72,6 +73,9 @@ export function GreetingLayer() {
       height: 0,
       pixelRatio: 0,
       pendingGreeting: null as Group | null,
+      count: -1,
+      stable: 0,
+      warmedCount: -1,
     };
   }, [renderer, scene, foreground, camera, amount]);
 
@@ -100,6 +104,24 @@ export function GreetingLayer() {
   useFrame(
     ({ size }) => {
       const pixelRatio = renderer.getPixelRatio();
+      // Foreground renderers mount as their assets resolve, so compile the foreground pass
+      // again whenever its object count settles. The pass targets exist after the first render.
+      if (effect.warmed) {
+        let count = 0;
+        foreground.traverse(() => count++);
+        if (count !== effect.count) {
+          effect.count = count;
+          effect.stable = 0;
+        } else if (effect.warmedCount !== count && ++effect.stable >= 30) {
+          effect.warmedCount = count;
+          void warmUp(renderer, foreground, camera, foreground, effect.foregroundPass.renderTarget);
+          void warmUp(renderer, scene, camera, scene, effect.scenePass.renderTarget);
+        }
+      }
+      // The blur passes only run while the soft focus contributes. At zero it is mixed out
+      // exactly, so the sharp frames skip two full resolution passes.
+      const blurring = amount.value > 0 || !effect.warmed || !!effect.pendingGreeting;
+      effect.blurred.updateBeforeType = blurring ? NodeUpdateType.FRAME : NodeUpdateType.NONE;
       // Prepare the blur on screen or viewport changes, then bypass it while sharp.
       if (
         !effect.warmed ||

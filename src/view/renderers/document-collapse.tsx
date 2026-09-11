@@ -253,6 +253,7 @@ export function DocumentCollapse({
     const burst = point.length().pow(2).mul(-14).exp().mul(u.flash);
 
     return {
+      warpVertex: vec4(positionLocal.xy.mul(2), 0, 1),
       position: swept,
       paper: mix(ink.rgb.mul(shade), color('#ffb37a'), loose.pow(3).mul(0.8)),
       paperOpacity: ink.a.mul(float(1).sub(smoothstep(0.88, 1, loose))),
@@ -456,7 +457,7 @@ export function DocumentCollapse({
       <mesh ref={warpMesh} name="announcement-warp" renderOrder={20} frustumCulled={false}>
         <planeGeometry args={[1, 1]} />
         <meshBasicNodeMaterial
-          vertexNode={vec4(positionLocal.xy.mul(2), 0, 1)}
+          vertexNode={nodes.warpVertex}
           colorNode={nodes.warpColor}
           opacityNode={nodes.warpOpacity}
           transparent
