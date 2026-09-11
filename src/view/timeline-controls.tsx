@@ -15,7 +15,7 @@ export function TimelineControls() {
       )
         return;
 
-      if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.code === 'Space') {
         event.preventDefault();
         next();
       } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
