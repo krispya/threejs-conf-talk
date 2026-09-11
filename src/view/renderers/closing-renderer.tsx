@@ -6,21 +6,19 @@ import { useQueryFirst, useTarget, useTrait } from 'koota/react';
 import { lerp } from 'math';
 import { easing } from 'math/time';
 import { useMemo, useRef } from 'react';
-import { color, smoothstep } from 'three/tsl';
+import { smoothstep } from 'three/tsl';
 import { SRGBColorSpace, type Group, type Node } from 'three/webgpu';
 import { ActiveScreen, Screen, Timeline } from '../../sim/index.js';
 import { fonts } from '../../theme.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 
 useMSDF.preload(fonts.sans);
-useMSDF.preload(fonts.sansLight);
 useMSDF.preload(fonts.mono);
 useTexture.preload('./closing/discord-qr.png');
 
 /** The send off: black type on the brand cyan with the Discord invite as a QR code. */
 export function ClosingRenderer() {
   const sans = useMSDF(fonts.sans);
-  const light = useMSDF(fonts.sansLight);
   const mono = useMSDF(fonts.mono);
   const timeline = useQueryFirst(Timeline);
   const screen = useTarget(timeline, ActiveScreen);
@@ -30,11 +28,13 @@ export function ClosingRenderer() {
     duration: visible ? 1.1 : 0.35,
     delay: visible ? 0.3 : 0,
     ease: easing.cubicOut,
+    clock: 'frames',
   });
   const code = useTransitionOpacity(visible, {
     duration: visible ? 1 : 0.35,
     delay: visible ? 0.75 : 0,
     ease: easing.cubicOut,
+    clock: 'frames',
   });
   const qr = useTexture('./closing/discord-qr.png', (texture) => {
     texture.colorSpace = SRGBColorSpace;
@@ -43,7 +43,6 @@ export function ClosingRenderer() {
     () =>
       defineTextMaterial((context) => {
         const material = context.createDefaultMaterial();
-        material.colorNode = color('#000000');
         material.opacityNode =
           (material.opacityNode as Node<'float'> | null)?.mul(progress) ?? progress;
         material.depthTest = false;
@@ -52,26 +51,15 @@ export function ClosingRenderer() {
       }),
     [progress]
   );
-  const caption = useMemo(
-    () =>
-      defineTextMaterial((context) => {
-        const material = context.createDefaultMaterial();
-        material.colorNode = color('#000000');
-        material.opacityNode = (material.opacityNode as Node<'float'> | null)?.mul(code) ?? code;
-        material.depthTest = false;
-        material.depthWrite = false;
-        return material;
-      }),
-    [code]
-  );
   const codeOpacity = useMemo(() => smoothstep(0, 0.5, code), [code]);
   const root = useRef<Group>(null);
+  const chip = useRef<Group>(null);
   const words = useRef<Group>(null);
   const invite = useRef<Group>(null);
 
   useFrame(
     (state) => {
-      if (!root.current || !words.current || !invite.current) return;
+      if (!root.current || !chip.current || !words.current || !invite.current) return;
       root.current.visible = progress.value > 0 || code.value > 0;
       if (!root.current.visible) return;
       // Frame a 16 by 9 layout a fixed distance in front of wherever the camera rests
@@ -81,38 +69,73 @@ export function ClosingRenderer() {
         state.camera,
         root.current.position
       );
-      root.current.scale.setScalar(Math.min(height / 9, width / 16));
-      words.current.position.y = lerp(-0.6, 0, progress.value);
-      invite.current.scale.setScalar(lerp(0.92, 1, code.value));
+      const scale = Math.min(height / 9, width / 16);
+      root.current.scale.setScalar(scale);
+      chip.current.position.set((-width * 0.455) / scale, (height * 0.46) / scale, 0);
+      words.current.position.y = lerp(-0.4, 0, progress.value);
+      invite.current.scale.setScalar(lerp(0.96, 1, code.value));
     },
     { priority: -0.6 }
   );
 
   return (
     <group ref={root} name="closing" visible={false}>
-      <group ref={words} name="closing-words">
-        <TextGroup material={ink} renderOrder={40}>
+      <group ref={chip} name="closing-chip">
+        <mesh position={[1.95, -0.23, 0]} renderOrder={40}>
+          <planeGeometry args={[3.9, 0.46]} />
+          <meshBasicNodeMaterial
+            color="#000000"
+            opacityNode={progress}
+            transparent
+            depthTest={false}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+        <TextGroup material={ink} renderOrder={41}>
           <Text
-            font={sans}
-            position={[-7.2, 1.65, 0]}
+            font={mono}
+            position={[0.15, -0.06, 0]}
             layout={{ wrap: 'none' }}
-            style={{ fontSize: 1.2, lineHeight: 1 }}
-          >
-            COME JOIN US
-          </Text>
-          <Text
-            font={light}
-            position={[-7.2, 0.15, 0]}
-            layout={{ wrap: 'none' }}
-            style={{ fontSize: 0.56, lineHeight: 1 }}
+            style={{ fontSize: 0.25, lineHeight: 1, color: '#ffffff' }}
           >
             This only works together
           </Text>
         </TextGroup>
       </group>
-      <group ref={invite} name="discord-invite" position={[5, 0, 0]}>
+      <group ref={words} name="closing-words">
+        <TextGroup material={ink} renderOrder={40}>
+          <Text
+            font={sans}
+            position={[-7.28, 2.55, 0]}
+            layout={{ wrap: 'none' }}
+            style={{ fontSize: 2.6, lineHeight: 1, color: '#000000' }}
+          >
+            Join
+          </Text>
+          <Text
+            font={sans}
+            position={[-7.28, 0.8, 0]}
+            layout={{ wrap: 'none' }}
+            style={{ fontSize: 2.6, lineHeight: 1, color: '#000000' }}
+          >
+            us.
+          </Text>
+        </TextGroup>
+      </group>
+      <group ref={invite} name="discord-invite" position={[5.9, -2, 0]}>
+        <TextGroup material={ink} renderOrder={41}>
+          <Text
+            font={mono}
+            position={[-1.2, -1.7, 0]}
+            layout={{ wrap: 'none' }}
+            style={{ fontSize: 0.18, lineHeight: 1, color: '#000000' }}
+          >
+            discord.gg/poimandres
+          </Text>
+        </TextGroup>
         <mesh renderOrder={40}>
-          <planeGeometry args={[3.9, 3.9]} />
+          <planeGeometry args={[2.4, 2.4]} />
           <meshBasicNodeMaterial
             map={qr}
             opacityNode={codeOpacity}
@@ -122,17 +145,6 @@ export function ClosingRenderer() {
             toneMapped={false}
           />
         </mesh>
-        <TextGroup material={caption} renderOrder={41}>
-          <Text
-            font={mono}
-            position={[-1.95, -2.25, 0]}
-            constraints={{ width: { mode: 'exact', size: 3.9 } }}
-            layout={{ align: 'center', wrap: 'none' }}
-            style={{ fontSize: 0.27, lineHeight: 1 }}
-          >
-            discord.gg/poimandres
-          </Text>
-        </TextGroup>
       </group>
     </group>
   );
