@@ -16,7 +16,7 @@ export const showreelTiles = [
   { id: 'camera-scene', title: 'Camera scene', video: './showreel/camera-scene.mp4' },
   { id: 'inter-text', title: 'Inter text', video: './showreel/inter-text.mp4' },
   { id: 'painterly', title: 'Painterly still life', video: './showreel/painterly.mp4' },
-  { id: 'r3f', title: 'React Three Fiber', video: './showreel/r3f.mp4' },
+  { id: 'glass-object', title: 'Glass objects', video: './showreel/glass-object.mp4' },
   { id: 'postprocessing', title: 'Postprocessing examples', video: './showreel/postprocessing.mp4' },
   { id: 'balls', title: 'Balls', video: './showreel/balls.mp4' },
   { id: 'reflective-sphere', title: 'Reflective sphere', video: './showreel/reflective-sphere.mp4' },
