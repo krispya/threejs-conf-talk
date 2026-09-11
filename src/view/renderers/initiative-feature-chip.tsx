@@ -1,10 +1,11 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import { useFrame } from '@react-three/fiber/webgpu';
+import { useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
 import { type ComponentRef, useRef, useState } from 'react';
 import { uniform } from 'three/tsl';
-import type { Group } from 'three/webgpu';
+import { SRGBColorSpace, type Group } from 'three/webgpu';
+import { allProfiles, type ProfileLogin } from '../../data/profiles.js';
 import { Time } from '../../sim/index.js';
 import { brand, fonts, ramp } from '../../theme.js';
 import type { useTransitionOpacity } from '../use-transition-opacity.js';
@@ -14,12 +15,14 @@ export function InitiativeFeatureChip({
   index,
   width,
   count,
+  profile,
   opacity: visibility,
 }: {
   children: string;
   index: number;
   width: number;
   count: number;
+  profile?: ProfileLogin;
   opacity: ReturnType<typeof useTransitionOpacity>;
 }) {
   const font = useMSDF(fonts.mono);
@@ -56,10 +59,67 @@ export function InitiativeFeatureChip({
 
   return (
     <group ref={group} visible={false}>
+      <group position={[profile ? 0.29 : 0, 0, 0]}>
+        {profile && <FeaturePortrait login={profile} width={width} opacity={opacity} />}
+        <mesh renderOrder={10}>
+          <planeGeometry args={[width, 0.44]} />
+          <meshBasicNodeMaterial
+            color={brand.yellow}
+            opacityNode={opacity}
+            transparent
+            depthWrite={false}
+            depthTest={false}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh position={[-width / 2 + 0.16, 0, 0.01]} renderOrder={11}>
+          <circleGeometry args={[0.04, 24]} />
+          <meshBasicNodeMaterial
+            color={ramp['dark-900']}
+            opacityNode={opacity}
+            transparent
+            depthWrite={false}
+            depthTest={false}
+            toneMapped={false}
+          />
+        </mesh>
+        <TextGroup renderOrder={11}>
+          <Text
+            ref={text}
+            font={font}
+            position={[-width / 2 + 0.28, 0.12, 0.01]}
+            constraints={{ width: { mode: 'exact', size: width - 0.4 } }}
+            layout={{ wrap: 'none' }}
+            style={{ fontSize: 0.24, lineHeight: 1, color: ramp['dark-900'], opacity: 0 }}
+          >
+            {children}
+          </Text>
+        </TextGroup>
+      </group>
+    </group>
+  );
+}
+
+function FeaturePortrait({
+  login,
+  width,
+  opacity,
+}: {
+  login: ProfileLogin;
+  width: number;
+  opacity: ReturnType<typeof useTransitionOpacity>;
+}) {
+  const profile = allProfiles.find((profile) => profile.login === login)!;
+  const portrait = useTexture(profile.avatar, (texture) => {
+    texture.colorSpace = SRGBColorSpace;
+  });
+
+  return (
+    <group name={`feature-${login}`} position={[-width / 2 - 0.34, 0, 0.01]}>
       <mesh renderOrder={10}>
-        <planeGeometry args={[width, 0.44]} />
+        <ringGeometry args={[0.22, 0.24, 48]} />
         <meshBasicNodeMaterial
-          color={brand.yellow}
+          color={ramp['light-25']}
           opacityNode={opacity}
           transparent
           depthWrite={false}
@@ -67,10 +127,10 @@ export function InitiativeFeatureChip({
           toneMapped={false}
         />
       </mesh>
-      <mesh position={[-width / 2 + 0.16, 0, 0.01]} renderOrder={11}>
-        <circleGeometry args={[0.04, 24]} />
+      <mesh renderOrder={11}>
+        <circleGeometry args={[0.22, 48]} />
         <meshBasicNodeMaterial
-          color={ramp['dark-900']}
+          map={portrait}
           opacityNode={opacity}
           transparent
           depthWrite={false}
@@ -78,18 +138,6 @@ export function InitiativeFeatureChip({
           toneMapped={false}
         />
       </mesh>
-      <TextGroup renderOrder={11}>
-        <Text
-          ref={text}
-          font={font}
-          position={[-width / 2 + 0.28, 0.12, 0.01]}
-          constraints={{ width: { mode: 'exact', size: width - 0.4 } }}
-          layout={{ wrap: 'none' }}
-          style={{ fontSize: 0.24, lineHeight: 1, color: ramp['dark-900'], opacity: 0 }}
-        >
-          {children}
-        </Text>
-      </TextGroup>
     </group>
   );
 }

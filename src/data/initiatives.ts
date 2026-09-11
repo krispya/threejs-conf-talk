@@ -1,3 +1,5 @@
+import type { ProfileLogin } from './profiles.js';
+
 export const initiatives = [
   {
     id: 'math',
@@ -45,7 +47,11 @@ export const initiatives = [
     id: 'experimental',
     profile: null,
     title: 'Experimental',
-    chips: ['FRS Upscaler', 'Denoiser', 'Klipp'],
+    chips: [
+      { label: 'FSR Upscaler', profile: 'DennisSmolek' },
+      { label: 'Denoiser', profile: 'DennisSmolek' },
+      { label: 'Klipp', profile: 'kvvasuu' },
+    ] satisfies { label: string; profile: ProfileLogin }[],
     color: '#ebff0f',
     position: { x: 65, y: 25, z: -85 },
     video: './initiatives/experimental.mp4',
@@ -54,12 +60,12 @@ export const initiatives = [
   },
   {
     id: 'games',
-    profile: null,
-    title: 'Games',
+    profile: 'isaac-mason',
+    title: 'Games!',
     color: '#ff73a9',
     position: { x: 115, y: -65, z: -120 },
-    video: '',
-    source: '',
-    secret: true,
+    video: './initiatives/games.mp4',
+    source: 'https://x.com/isaac_mason_/status/2075454607237820797',
+    secret: false,
   },
 ] as const;

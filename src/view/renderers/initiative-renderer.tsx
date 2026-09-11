@@ -48,6 +48,7 @@ import { withMeshopt } from '../load-gltf.js';
 import { initiativeSky } from '../initiative-sky.js';
 import { useTransitionOpacity } from '../use-transition-opacity.js';
 import { warmUp } from '../warm-up.js';
+import { BenchmarkRenderer } from './benchmark-renderer.js';
 import { createInitiativeMedia } from './initiative-media.js';
 import { InitiativeFeatureChip } from './initiative-feature-chip.js';
 import { createInitiativeGlade, disposeInitiativeGlade } from './initiative-glade.js';
@@ -90,11 +91,11 @@ export function InitiativeRenderer() {
     initiative && 'installCommand' in initiative ? initiative.installCommand : '';
   const installWidth = installCommand.length * 0.22 * 0.62 + 0.24;
   const chips = data?.initiativeChips.length
-    ? data.initiativeChips
+    ? data.initiativeChips.map((label) => ({ label, profile: undefined }))
     : initiative && 'chips' in initiative
       ? initiative.chips
       : [];
-  const chipsWidth = Math.max(0, ...chips.map((chip) => chip.length * 0.24 * 0.62 + 0.44));
+  const chipsWidth = Math.max(0, ...chips.map((chip) => chip.label.length * 0.24 * 0.62 + 0.44));
   const renderer = useThree((state) => state.renderer);
   const camera = useThree((state) => state.camera);
   const scene = useThree((state) => state.scene);
@@ -461,7 +462,11 @@ export function InitiativeRenderer() {
         const scale = Math.min(
           viewport.height / 9,
           viewport.width /
-            Math.max(labelWidth + (profile ? 1.9 : 1), installWidth + 1.9, chipsWidth + 1.9)
+            Math.max(
+              labelWidth + (profile ? 1.9 : 1),
+              installWidth + 1.9,
+              chipsWidth + (chips.some((chip) => chip.profile) ? 0.58 : 0) + 1.9
+            )
         );
         label.current.scale.setScalar(scale * (0.8 + 0.2 * labelOpacity.value));
         label.current.position.x = profile ? 0.45 * scale : 0;
@@ -525,6 +530,7 @@ export function InitiativeRenderer() {
           toneMapped={false}
         />
       </mesh>
+      {createPortal(<BenchmarkRenderer />, resources.scene)}
       {createPortal(
         <group ref={label} name="initiative-label" visible={false}>
           <group
@@ -609,13 +615,14 @@ export function InitiativeRenderer() {
           <group ref={chipColumn}>
             {chips.map((chip, index) => (
               <InitiativeFeatureChip
-                key={`${data?.id}:${chip}`}
+                key={`${data?.id}:${chip.label}`}
                 index={index}
                 width={chipsWidth}
                 count={chips.length}
+                profile={chip.profile}
                 opacity={labelOpacity}
               >
-                {chip}
+                {chip.label}
               </InitiativeFeatureChip>
             ))}
           </group>
