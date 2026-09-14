@@ -20,9 +20,9 @@ let capture;
 let conjure;
 before(async () => {
   server = await createServer({ server: { middlewareMode: true, ws: false }, appType: 'custom' });
-  video = await server.ssrLoadModule('/src/view/showreel-motion.ts');
+  video = await server.ssrLoadModule('/src/background/showreel/motion.ts');
   capture = await server.ssrLoadModule('/src/view/glass/transmission-backdrop.ts');
-  conjure = await server.ssrLoadModule('/src/sim/portal-conjure.ts');
+  conjure = await server.ssrLoadModule('/src/initiative/utils/portal-motion.ts');
 });
 after(async () => {
   await server?.close();
@@ -56,9 +56,7 @@ function step(motion, now, overrides = {}) {
 }
 
 void test('portal channels keep the outgoing video until the next one is ready and resume on return', async (t) => {
-  const { createInitiativeMedia } = await server.ssrLoadModule(
-    '/src/view/renderers/initiative-media.ts'
-  );
+  const { createInitiativeMedia } = await server.ssrLoadModule('/src/initiative/media.ts');
   const originalDocument = globalThis.document;
   const videos = [];
   globalThis.document = {
@@ -272,7 +270,7 @@ void test('a failed capture restores visibility, current thickness, renderer tar
 });
 
 void test('video resources pause under blackout and are released across mount and cleanup cycles', async (t) => {
-  const sourceModule = await server.ssrLoadModule('/src/view/showreel-source.ts');
+  const sourceModule = await server.ssrLoadModule('/src/background/showreel/source.ts');
   const originalDocument = globalThis.document;
   const elements = [];
   globalThis.document = {
@@ -322,4 +320,92 @@ void test('video resources pause under blackout and are released across mount an
     motion.visible = false;
     motion.blackout = 0;
   }
+});
+
+void test('nebula bakes create fresh targets across cleanup and restore the renderer on failure', async () => {
+  const { bakeNebula } = await server.ssrLoadModule('/scripts/bake-textures.ts');
+  const originalTarget = {};
+  let currentTarget = originalTarget;
+  let fail = false;
+  let disposedTargets = 0;
+  let disposedMaterials = 0;
+  const targets = [];
+  const renderer = {
+    getRenderTarget: () => currentTarget,
+    setRenderTarget: (target) => {
+      currentTarget = target;
+    },
+    render: (quad) => {
+      targets.push(currentTarget);
+      currentTarget.addEventListener('dispose', () => {
+        disposedTargets++;
+      });
+      quad.material.addEventListener('dispose', () => {
+        disposedMaterials++;
+      });
+      if (fail) throw new Error('bake failed');
+    },
+  };
+  for (let mount = 0; mount < 2; mount++) {
+    const target = bakeNebula(renderer);
+    assert.equal(target.texture.name, 'Nebula');
+    assert.equal(currentTarget, originalTarget);
+    assert.equal(disposedTargets, mount);
+    assert.equal(disposedMaterials, mount + 1);
+    target.dispose();
+  }
+  assert.notEqual(targets[0], targets[1]);
+  assert.equal(disposedTargets, 2);
+  fail = true;
+  assert.throws(() => bakeNebula(renderer), /bake failed/);
+  assert.equal(currentTarget, originalTarget);
+  assert.equal(disposedTargets, 3);
+  assert.equal(disposedMaterials, 3);
+});
+
+void test('the saved nebula retains its full-resolution emission and dust channels', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { EXRLoader } = await import('three/addons/loaders/EXRLoader.js');
+  const { DataUtils, HalfFloatType, RGBAFormat } = await import('three');
+  const bytes = await readFile(new URL('../public/sky/nebula.exr', import.meta.url));
+  const image = new EXRLoader().parse(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  );
+  assert.equal(image.width, 2048);
+  assert.equal(image.height, 1024);
+  assert.equal(image.type, HalfFloatType);
+  assert.equal(image.format, RGBAFormat);
+  assert.equal(image.data.length, image.width * image.height * 4);
+  let emission = 0;
+  let dust = 1;
+  for (let i = 0; i < image.data.length; i += 4) {
+    for (let channel = 0; channel < 4; channel++)
+      assert(Number.isFinite(DataUtils.fromHalfFloat(image.data[i + channel])));
+    emission = Math.max(emission, DataUtils.fromHalfFloat(image.data[i]));
+    const transmission = DataUtils.fromHalfFloat(image.data[i + 3]);
+    assert(transmission >= 0 && transmission <= 1);
+    dust = Math.min(dust, transmission);
+  }
+  assert(emission > 0.1);
+  assert(dust < 0.9);
+});
+
+void test('saved studio lighting includes HDR radiance and the complete cube-UV roughness atlas', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { EXRLoader } = await import('three/addons/loaders/EXRLoader.js');
+  const { DataUtils, HalfFloatType } = await import('three');
+  const bytes = await readFile(new URL('../public/sky/environment.exr', import.meta.url));
+  const image = new EXRLoader().parse(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  );
+  assert.equal(image.width, 768);
+  assert.equal(image.height, 1024);
+  assert.equal(image.type, HalfFloatType);
+  let maximum = 0;
+  for (let i = 0; i < image.data.length; i++) {
+    const value = DataUtils.fromHalfFloat(image.data[i]);
+    assert(Number.isFinite(value));
+    maximum = Math.max(maximum, value);
+  }
+  assert(maximum > 1, 'Reflection highlights retain their HDR values');
 });

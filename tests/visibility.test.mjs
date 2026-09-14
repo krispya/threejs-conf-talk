@@ -1,3 +1,4 @@
+import { loadPresentation } from './helpers/load-presentation.mjs';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createWorld } from 'koota';
@@ -12,8 +13,8 @@ let useEntityVisible;
 
 before(async () => {
   server = await createServer({ server: { middlewareMode: true, ws: false }, appType: 'custom' });
-  sim = await server.ssrLoadModule('/src/sim/index.ts');
-  ({ useEntityVisible } = await server.ssrLoadModule('/src/view/use-entity-visible.ts'));
+  sim = await loadPresentation(server);
+  ({ useEntityVisible } = await server.ssrLoadModule('/src/view/hooks.ts'));
 });
 
 after(async () => {
@@ -33,7 +34,8 @@ function createScene(t) {
     profile: actions.createProfile('krispya', './profiles/krispya.png', 0),
   };
   const timeline = sim.timelineActions(world);
-  timeline.start();
+  const entity = timeline.createTimeline(sim.screens.map((screen) => ({ ...screen, requires: [] })));
+  timeline.startTimeline(entity);
   return { world, entities, timeline };
 }
 

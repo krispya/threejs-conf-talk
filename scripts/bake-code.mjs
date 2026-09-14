@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { Resvg } from '@resvg/resvg-js';
 import opentype from 'opentype.js';
 import { createHighlighter } from 'shiki';
-import { codeExamples } from '../src/data/code-examples.ts';
+import { codeExamples } from '../src/package/comparison/data.ts';
 
 // Bake syntax colors and font outlines so code renders as two static textures.
 const highlighter = await createHighlighter({

@@ -1,7 +1,7 @@
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useRef } from 'react';
 import { useTransmissionBackdrop } from './glass/transmission-backdrop-provider.js';
-import { warmUp } from './warm-up.js';
+import { warmUp } from './utils/warm-up.js';
 
 /**
  * Compile every pipeline the talk can reach before its screen arrives. Renderers mount as their

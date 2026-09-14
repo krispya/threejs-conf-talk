@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { placeMaintainerPortrait } from '../src/view/package-maintainer-layout.ts';
+import { placeMaintainerPortrait } from '../src/package/utils/maintainer-layout.ts';
 
 void test('maintainers float independently along label edges at one small local size', () => {
   for (const width of [1, 3, 5]) {

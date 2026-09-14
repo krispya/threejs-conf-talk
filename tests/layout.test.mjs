@@ -1,3 +1,4 @@
+import { loadPresentation } from './helpers/load-presentation.mjs';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createWorld } from 'koota';
@@ -9,8 +10,8 @@ let trails;
 
 before(async () => {
   server = await createServer({ server: { middlewareMode: true, ws: false }, appType: 'custom' });
-  sim = await server.ssrLoadModule('/src/sim/index.ts');
-  trails = await server.ssrLoadModule('/src/view/title-trails.ts');
+  sim = await loadPresentation(server);
+  trails = await server.ssrLoadModule('/src/title/utils/trails.ts');
 });
 
 after(async () => {
@@ -32,7 +33,7 @@ function createProfiles(t) {
 
 void test('portrait packing stays deterministic and refreshes after framing or population changes', (t) => {
   const { world, actions, camera, profiles, screen } = createProfiles(t);
-  const layout = sim.systems.createProfileLayout(9);
+  const layout = sim.createProfileLayout(9);
   const anchors = () => world.query(sim.Profile, sim.Anchor).map((entity) => entity.get(sim.Anchor));
   assert(sim.systems.placeProfiles(world, layout));
   const original = anchors();
@@ -55,17 +56,17 @@ void test('portrait packing stays deterministic and refreshes after framing or p
     change();
     assert(sim.systems.placeProfiles(world, layout));
     const cached = anchors();
-    assert(sim.systems.placeProfiles(world, sim.systems.createProfileLayout(9)));
+    assert(sim.systems.placeProfiles(world, sim.createProfileLayout(9)));
     assert.deepEqual(cached, anchors(), 'A reused workspace matches a fresh layout');
   }
 });
 
 void test('portrait packing preserves anchors when capacity or framing is invalid and recovers', (t) => {
   const { world, profiles } = createProfiles(t);
-  const layout = sim.systems.createProfileLayout(8);
+  const layout = sim.createProfileLayout(8);
   assert(sim.systems.placeProfiles(world, layout));
   const original = profiles.map((entity) => entity.get(sim.Anchor));
-  assert.equal(sim.systems.placeProfiles(world, sim.systems.createProfileLayout(7)), false);
+  assert.equal(sim.systems.placeProfiles(world, sim.createProfileLayout(7)), false);
   assert.deepEqual(
     profiles.map((entity) => entity.get(sim.Anchor)),
     original
@@ -88,7 +89,7 @@ void test('portrait packing preserves anchors when capacity or framing is invali
     original
   );
   for (const entity of profiles) entity.destroy();
-  assert(sim.systems.placeProfiles(world, sim.systems.createProfileLayout(0)));
+  assert(sim.systems.placeProfiles(world, sim.createProfileLayout(0)));
 });
 
 void test('title trails point outward, scale with viewport pixels, and reveal in density bands', () => {

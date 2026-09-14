@@ -1,14 +1,14 @@
 import { Canvas } from '@react-three/fiber/webgpu';
-import { Background } from './view/background.js';
+import { Background } from './background/renderer.js';
 import { BrandMark } from './view/brand-mark.js';
 import { Environment } from './view/environment.js';
-import { FrameLoop } from './view/frameloop.js';
+import { FrameLoop } from './frameloop.js';
 import { Prewarm } from './view/prewarm.js';
-import { Renderers } from './view/renderers.js';
+import { Renderers } from './renderers.js';
 import { ResolutionCap } from './view/resolution-cap.js';
 import { TransmissionBackdropProvider } from './view/glass/transmission-backdrop-provider.js';
-import { Startup } from './view/startup.js';
-import { TimelineControls } from './view/timeline-controls.js';
+import { Startup } from './startup.js';
+import { TimelineControls } from './timeline/controls.js';
 
 export function App() {
   return (

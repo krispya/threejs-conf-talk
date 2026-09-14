@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber/webgpu';
-import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, type ReactNode, useMemo } from 'react';
 import {
   captureTransmissionBackdrop,
   createTransmissionBackdrop,
@@ -19,7 +19,7 @@ export function TransmissionBackdropProvider({
   resolution?: number;
   backsideResolution?: number;
 }) {
-  const [backdrop] = useState(createTransmissionBackdrop);
+  const backdrop = useMemo(() => createTransmissionBackdrop(), []);
   useLayoutEffect(() => {
     // Capture resources are mutable render state, independent of React's display state.
     /* oxlint-disable react/immutability */

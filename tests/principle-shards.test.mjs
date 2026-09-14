@@ -10,7 +10,7 @@ let shards;
 let font;
 before(async () => {
   server = await createServer({ server: { middlewareMode: true, ws: false }, appType: 'custom' });
-  shards = await server.ssrLoadModule('/src/view/principle-shards.ts');
+  shards = await server.ssrLoadModule('/src/charter/principles/utils/geometry.ts');
   font = new Font(
     JSON.parse(await readFile(new URL('../public/fonts/geist-black.typeface.json', import.meta.url)))
   );

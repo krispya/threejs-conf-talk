@@ -9,7 +9,7 @@ import {
   RenderTarget,
   type WebGPURenderer,
 } from 'three/webgpu';
-import { hash21, spectrum } from '../src/view/starfield.js';
+import { hash21, spectrum } from '../src/background/utils/starfield.js';
 
 // Match the runtime shader's loosely typed TSL helpers.
 /* oxlint-disable typescript/no-explicit-any */

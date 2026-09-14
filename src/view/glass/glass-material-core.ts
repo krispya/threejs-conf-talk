@@ -1,10 +1,17 @@
-import { uniform } from 'three/tsl';
-import { MeshPhysicalNodeMaterial } from 'three/webgpu';
-import type { Node, TextureNode } from 'three/webgpu';
+import { uniform, diffuseColor, mix, transmission } from 'three/tsl';
+import {
+  MeshPhysicalNodeMaterial,
+  type Node,
+  type TextureNode,
+  PhysicalLightingModel,
+  type NodeBuilder,
+} from 'three/webgpu';
 import type { BackdropConfig } from './transmission-backdrop.js';
-import { TransmissionPhysicalLightingModel } from './transmission-lighting-model.js';
-import { buildTransmissionBackdropNode, createTransmissionUniforms } from './transmission-nodes.js';
-import type { TransmissionUniforms } from './transmission-nodes.js';
+import {
+  buildTransmissionBackdropNode,
+  createTransmissionUniforms,
+  type TransmissionUniforms,
+} from './transmission-nodes.js';
 
 /** MeshPhysicalNodeMaterial whose transmission samples a screen-space backdrop capture. */
 export class GlassPhysicalNodeMaterial extends MeshPhysicalNodeMaterial {
@@ -45,5 +52,35 @@ export class GlassPhysicalNodeMaterial extends MeshPhysicalNodeMaterial {
       this.useAnisotropy,
       this.transmissionBackdropNode
     );
+  }
+}
+
+/**
+ * Physical lighting model that swaps Three's built-in IBL volume refraction for a backdrop
+ * node sampled from a screen-space capture of the scene behind the glass.
+ */
+class TransmissionPhysicalLightingModel extends PhysicalLightingModel {
+  private readonly backdropNode: Node | null;
+
+  constructor(
+    clearcoat: boolean,
+    sheen: boolean,
+    iridescence: boolean,
+    anisotropy: boolean,
+    backdropNode: Node | null
+  ) {
+    super(clearcoat, sheen, iridescence, anisotropy, false, false);
+    this.backdropNode = backdropNode;
+  }
+
+  override start(builder: NodeBuilder) {
+    if (this.backdropNode !== null) {
+      const context = builder.context as Record<string, unknown>;
+      context.backdrop = this.backdropNode;
+      context.backdropAlpha = transmission;
+      diffuseColor.a.mulAssign(mix(1, (this.backdropNode as any).a, transmission));
+    }
+
+    super.start(builder);
   }
 }

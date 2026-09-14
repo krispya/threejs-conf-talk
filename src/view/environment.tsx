@@ -1,27 +1,28 @@
-import { useThree } from '@react-three/fiber/webgpu';
-import { useEffect } from 'react';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { PMREMGenerator } from 'three/webgpu';
+import { useLoader, useThree } from '@react-three/fiber/webgpu';
+import { useLayoutEffect } from 'react';
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+import { CubeUVReflectionMapping } from 'three/webgpu';
 
-/** Offline studio-style environment map so glass has something to reflect. */
+useLoader.preload(EXRLoader, './sky/environment.exr');
+
+/** Load the prefiltered studio lighting and bind it to the scene. */
 export function Environment({ intensity = 1 }: { intensity?: number }) {
-  const renderer = useThree((state) => state.renderer);
   const scene = useThree((state) => state.scene);
+  const environment = useLoader(EXRLoader, './sky/environment.exr');
 
-  // Scene mutation is the whole point of this effect
+  // The loader owns the texture, while the effect owns its scene binding.
   /* oxlint-disable react/immutability */
-  useEffect(() => {
-    const generator = new PMREMGenerator(renderer);
-    const target = generator.fromScene(new RoomEnvironment(), 0.04);
-    scene.environment = target.texture;
+  useLayoutEffect(() => {
+    const previous = scene.environment;
+    const previousIntensity = scene.environmentIntensity;
+    environment.mapping = CubeUVReflectionMapping;
+    scene.environment = environment;
     scene.environmentIntensity = intensity;
-    generator.dispose();
-
     return () => {
-      scene.environment = null;
-      target.dispose();
+      scene.environment = previous;
+      scene.environmentIntensity = previousIntensity;
     };
-  }, [renderer, scene, intensity]);
+  }, [scene, environment, intensity]);
   /* oxlint-enable react/immutability */
 
   return null;

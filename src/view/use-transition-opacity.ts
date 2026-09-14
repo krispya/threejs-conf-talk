@@ -4,7 +4,9 @@ import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { uniform } from 'three/tsl';
-import { getRevealProgress, getTransitionProgress, Time, Timeline } from '../sim/index.js';
+import { getRevealProgress, getTransitionProgress } from '../timeline/timing.js';
+import { Time } from '../time/traits.js';
+import { Timeline } from '../timeline/traits.js';
 
 /**
  * A shader opacity that follows screen timing, reversing unless a restart is requested.
