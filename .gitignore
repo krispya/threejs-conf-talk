@@ -1,6 +1,9 @@
 # managed:start
 node_modules
 dist
+html/
+html.zip
+html.zip.tmp
 *.tsbuildinfo
 .env
 .env.*
