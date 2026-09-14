@@ -11,6 +11,7 @@ import { resizePackages, placePackages } from './package/systems.js';
 import { updateAnchors } from './letter/systems.js';
 import { floatBodies } from './floating/systems.js';
 import { syncTransforms } from './view/systems.js';
+import { advanceTransitions } from './transition/systems.js';
 
 // The application owns the order in which domain systems run.
 export function FrameLoop() {
@@ -20,6 +21,7 @@ export function FrameLoop() {
   useFrame((state, delta) => {
     updateTime(world, delta, state.elapsed);
     advanceTimeline(world);
+    advanceTransitions(world);
     moveCamera(world);
     resizePackages(world);
     updateAnchors(world);

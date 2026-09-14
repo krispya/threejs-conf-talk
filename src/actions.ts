@@ -7,6 +7,7 @@ import { letterActions } from './letter/actions.js';
 import { profileActions } from './profile/actions.js';
 import { packageActions } from './package/actions.js';
 import { timelineActions } from './timeline/actions.js';
+import { transitionActions } from './transition/actions.js';
 
 export const actions = createActions((world) => ({
   ...titleActions(world),
@@ -17,4 +18,5 @@ export const actions = createActions((world) => ({
   ...profileActions(world),
   ...packageActions(world),
   ...timelineActions(world),
+  ...transitionActions(world),
 }));
