@@ -17,3 +17,10 @@ export function packageLabelSize(radius: number, name: string) {
   const fontSize = clamp(radius * 0.24, 0.2, 0.26);
   return { fontSize, width: (name.length * 0.62 + 0.75) * fontSize };
 }
+
+const formatter = new Intl.NumberFormat('en-US');
+
+/** The weekly download ticker text, for both its layout width and its retained glyphs. */
+export function downloadsLabel(downloads: number) {
+  return `${formatter.format(downloads)} dl/wk`;
+}

@@ -24,12 +24,9 @@ export function BenchmarkRenderer() {
   const backing = useMemo(() => reveal.mul(0.96), [reveal]);
   const root = useRef<Group>(null);
 
-  useFrame(
-    () => {
-      if (root.current) root.current.visible = reveal.value > 0;
-    },
-    { priority: -0.55 }
-  );
+  useFrame(() => {
+    if (root.current) root.current.visible = reveal.value > 0;
+  });
 
   return (
     <group
@@ -67,14 +64,11 @@ function BenchmarkScene({ visible, bridge }: { visible: boolean; bridge: boolean
   const root = useRef<Group>(null);
   const { spiders, math, three } = spiderBenchmarks[spiderBenchmarks.length - 1]!;
 
-  useFrame(
-    () => {
-      if (!root.current) return;
-      root.current.visible = reveal.value > 0;
-      root.current.position.y = -0.12 * (1 - reveal.value);
-    },
-    { priority: -0.55 }
-  );
+  useFrame(() => {
+    if (!root.current) return;
+    root.current.visible = reveal.value > 0;
+    root.current.position.y = -0.12 * (1 - reveal.value);
+  });
 
   return (
     <group ref={root} name={bridge ? 'benchmark-three' : 'benchmark-spider'} visible={false}>
@@ -175,15 +169,12 @@ function BenchmarkMetric({
   const root = useRef<Group>(null);
   const columns = useRef<Group>(null);
 
-  useFrame(
-    () => {
-      if (!root.current || !columns.current) return;
-      root.current.visible = reveal.value > 0;
-      // Scale around the baseline so each bar grows upward without moving its foot.
-      columns.current.scale.y = reveal.value;
-    },
-    { priority: -0.55 }
-  );
+  useFrame(() => {
+    if (!root.current || !columns.current) return;
+    root.current.visible = reveal.value > 0;
+    // Scale around the baseline so each bar grows upward without moving its foot.
+    columns.current.scale.y = reveal.value;
+  });
 
   return (
     <group

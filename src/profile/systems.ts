@@ -1,6 +1,6 @@
 import { type ProfileLayout, teamLayout } from './utils/layout.js';
 import { Bounds, Camera } from '../camera/traits.js';
-import { IsHidden, Position, Rotation, Size } from '../traits.js';
+import { IsHidden, IsPresent, Position, Rotation, Size } from '../traits.js';
 import {
   TransitionOrigin,
   ActiveScreen,
@@ -10,13 +10,155 @@ import {
 } from '../timeline/traits.js';
 import { Time } from '../time/traits.js';
 import { Anchor, Float } from '../floating/traits.js';
-import type { World } from 'koota';
+import { Ref } from '../view/traits.js';
+import type { Entity, World } from 'koota';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
+import { Color, Vector3, type Camera as ThreeCamera, type Scene } from 'three';
 import { communityDepartureTime, profileArrival } from './utils/motion.js';
-import { Profile, ProfileFocus } from './traits.js';
-import { getRevealTime } from '../timeline/timing.js';
+import { Profile, ProfileFocus, ProfileParts, ProfilePresence, TeamNetwork } from './traits.js';
+import { getRevealTime, getTransitionProgress } from '../timeline/timing.js';
 import { mulberry32 } from 'math/random';
+import { ramp } from '../theme.js';
+
+// Ring colors for a portrait in front and one that has receded behind the newcomers
+const light = new Color(ramp['light-25']);
+const shadow = new Color('#141726');
+
+/**
+ * Advance each portrait's presence and apply it to the mounted portrait, ring, and aura.
+ * A portrait that has finished leaving releases its view.
+ */
+export function animateProfiles(world: World) {
+  const reveal = getRevealTime(world);
+  const transition = getTransitionProgress(world);
+  const retired: Entity[] = [];
+  world.query(Profile, ProfilePresence, ProfileFocus).updateEach(([, presence, focus], entity) => {
+    presence.value = lerp(
+      presence.from,
+      presence.target,
+      presence.focusing ? profileArrival(reveal, focus.slot, focus.count) : transition
+    );
+    if (!entity.has(IsPresent)) return;
+
+    const group = entity.get(Ref);
+    const parts = entity.get(ProfileParts);
+    if (group && parts?.portrait && parts.border) {
+      group.scale.setScalar(Math.max(0.001, presence.value * focus.scale));
+      // Receding portraits also thin out, letting the wall read through them. The spring
+      // settles past its mark, which belongs in the motion rather than the fade.
+      const faded = clamp(presence.value, 0, 1) * (1 - focus.recede * 0.45) * focus.wanderOpacity;
+      group.visible = faded > 0;
+      parts.portrait.opacity = faded;
+      parts.border.opacity = faded;
+      parts.dim.value = focus.recede * 0.72;
+      parts.border.color.lerpColors(light, shadow, parts.dim.value);
+      if (parts.aura) parts.aura.visible = parts.auraReveal.value > 0;
+    }
+    // Only retire a portrait once it has faded out. A portrait waiting on a screen's
+    // reveal delay also sits at zero, and retiring it there would keep it off screen.
+    if (presence.value === 0 && presence.target === 0) {
+      if (group) group.visible = false;
+      retired.push(entity);
+    }
+  });
+  for (const entity of retired) entity.remove(IsPresent);
+}
+
+const point = new Vector3();
+
+/**
+ * Links follow the settled team's projected portraits and stop at each portrait's edge.
+ * Runs after every view callback so the robot's placed transform is final for the frame.
+ */
+export function layoutTeamConnections(
+  world: World,
+  camera: ThreeCamera,
+  scene: Scene,
+  viewportAt: (target: Vector3) => { width: number; height: number }
+) {
+  const data = world.queryFirst(Timeline)?.targetFor(ActiveScreen)?.get(Screen);
+  world.query(TeamNetwork).updateEach(([network]) => {
+    const group = network.group;
+    if (!group) return;
+    group.visible = network.opacity.value > 0;
+    if (!group.visible) return;
+    const { nodes, connections, story } = network;
+    const depth = camera.position.z - 15;
+    point.set(camera.position.x, camera.position.y, depth);
+    const framing = viewportAt(point);
+    group.position.copy(point);
+    const visible = story
+      ? !!data?.storyConnectionsVisible
+      : !!data?.robotFriendly && !data.charterVisible && !data.announcementVisible;
+    // Freeze the network during its exit so departing portraits do not stretch the links.
+    if (visible) {
+      const profiles = world.query(Profile, Position, ProfileFocus, Size);
+      for (let index = 0; index < teamLayout.profiles.length; index++) {
+        const login = data?.surroundingProfiles[index];
+        const member = profiles.find((entity) => entity.get(Profile)!.login === login);
+        if (!member) {
+          group.visible = false;
+          return;
+        }
+        const position = member.get(Position)!;
+        if (position.z >= camera.position.z - 0.1) {
+          group.visible = false;
+          return;
+        }
+        point.set(position.x, position.y, position.z).project(camera);
+        nodes[index].x = point.x * framing.width * 0.5;
+        nodes[index].y = point.y * framing.height * 0.5;
+        nodes[index].radius =
+          (member.get(Size)!.radius * member.get(ProfileFocus)!.scale * 15) /
+          (camera.position.z - position.z);
+      }
+      network.robot ??= scene.getObjectByName('robot-team-center');
+      if (!network.robot) {
+        group.visible = false;
+        return;
+      }
+      network.robot.updateWorldMatrix(true, false);
+      network.robot.getWorldPosition(point);
+      if (point.z >= camera.position.z - 0.1) {
+        group.visible = false;
+        return;
+      }
+      point.project(camera);
+      // The robot's rotated bounding box is larger than the head inside it, so its links tuck
+      // in to the silhouette instead of stopping short of the face
+      nodes[teamLayout.profiles.length].x = point.x * framing.width * 0.5;
+      nodes[teamLayout.profiles.length].y = point.y * framing.height * 0.5;
+      nodes[teamLayout.profiles.length].radius =
+        framing.height *
+        0.5 *
+        teamLayout.radius *
+        Math.min(1, framing.width / framing.height / 1.5) *
+        (data?.charterFocus ? 0.5 : 1) *
+        0.72;
+    }
+    for (let index = 0; index < connections.length; index++) {
+      const [source, to] = connections[index];
+      const start = nodes[source];
+      const end = nodes[to];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const distance = Math.hypot(dx, dy);
+      const length = Math.max(0, distance - start.radius - end.radius);
+      const link = group.children[index];
+      const progress = clamp(
+        network.opacity.value * 1.4 -
+          (story ? (index / (connections.length - 1)) * 0.4 : index * 0.025),
+        0,
+        1
+      );
+      const middle = (start.radius + length * 0.5) / Math.max(distance, 0.001);
+      link.position.set(start.x + dx * middle, start.y + dy * middle, 0);
+      link.rotation.z = Math.atan2(dy, dx);
+      link.scale.set(length * progress, framing.height * 0.018, 1);
+    }
+  });
+}
 
 /** Add independent winding exits after the ring layout, in O(n) without per-profile allocations. */
 export function wanderProfiles(world: World) {

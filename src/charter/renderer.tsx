@@ -82,39 +82,36 @@ function CharterView({ entity }: { entity: Entity }) {
     [entity, bindView]
   );
 
-  useFrame(
-    (state) => {
-      const group = entity.get(Ref);
-      if (!group) return;
-      group.visible = progress.value > 0;
-      if (!group.visible || !sheet.current || !upperFold.current || !lowerFold.current) return;
+  useFrame((state) => {
+    const group = entity.get(Ref);
+    if (!group) return;
+    group.visible = progress.value > 0;
+    if (!group.visible || !sheet.current || !upperFold.current || !lowerFold.current) return;
 
-      const reveal = focus.value > 0 ? 1 : progress.value;
-      const slide = easing.cubicOut(clamp(reveal / 0.5, 0, 1));
-      const { height } = state.viewport.getCurrentViewport(state.camera, group.position);
-      // Slide the sheet until the initiatives heading at local y -5.1 reaches the top edge.
-      sheet.current.position.set(
-        lerp(3, 0, slide),
-        lerp(60, 0, slide) +
-          ((state.camera.position.y + height / 2 - 0.2 - group.position.y) / group.scale.y + 5.1) *
-            focus.value +
-          departure.value * 35,
-        0
-      );
-      sheet.current.rotation.set(lerp(-0.12, 0, slide), lerp(-0.08, 0, slide), lerp(0.05, 0, slide));
-      lowerFold.current.rotation.x = lerp(
-        -2.97,
-        -0.018,
-        easing.cubicInOut(clamp((reveal - 0.2) / 0.65, 0, 1))
-      );
-      upperFold.current.rotation.x = lerp(
-        3.06,
-        0.025,
-        easing.cubicInOut(clamp((reveal - 0.45) / 0.55, 0, 1))
-      );
-    },
-    { priority: -0.6 }
-  );
+    const reveal = focus.value > 0 ? 1 : progress.value;
+    const slide = easing.cubicOut(clamp(reveal / 0.5, 0, 1));
+    const { height } = state.viewport.getCurrentViewport(state.camera, group.position);
+    // Slide the sheet until the initiatives heading at local y -5.1 reaches the top edge.
+    sheet.current.position.set(
+      lerp(3, 0, slide),
+      lerp(60, 0, slide) +
+        ((state.camera.position.y + height / 2 - 0.2 - group.position.y) / group.scale.y + 5.1) *
+          focus.value +
+        departure.value * 35,
+      0
+    );
+    sheet.current.rotation.set(lerp(-0.12, 0, slide), lerp(-0.08, 0, slide), lerp(0.05, 0, slide));
+    lowerFold.current.rotation.x = lerp(
+      -2.97,
+      -0.018,
+      easing.cubicInOut(clamp((reveal - 0.2) / 0.65, 0, 1))
+    );
+    upperFold.current.rotation.x = lerp(
+      3.06,
+      0.025,
+      easing.cubicInOut(clamp((reveal - 0.45) / 0.55, 0, 1))
+    );
+  });
 
   return (
     <group ref={handleInit} name="charter" scale={0.13} visible={false}>

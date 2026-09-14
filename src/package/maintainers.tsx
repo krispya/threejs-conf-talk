@@ -1,43 +1,32 @@
-import { useFrame, useTexture } from '@react-three/fiber/webgpu';
+import { useTexture } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { useTrait } from 'koota/react';
-import { useRef, useMemo } from 'react';
+import { useMemo } from 'react';
 import { SRGBColorSpace, type Group } from 'three/webgpu';
 import { packages } from './data.js';
 import { allProfiles } from '../profile/data.js';
-import { Package } from './traits.js';
+import { MaintainerParts, Package } from './traits.js';
 import { ramp } from '../theme.js';
-import { placeMaintainerPortrait } from './utils/maintainer-layout.js';
+import { useTraitBinding } from '../view/hooks.js';
 import { useTransitionOpacity } from '../view/use-transition-opacity.js';
 
-export function PackageMaintainers({
-  entity,
-  visible,
-  width,
-  height,
-}: {
-  entity: Entity;
-  visible: boolean;
-  width: number;
-  height: number;
-}) {
-  const { name, index } = useTrait(entity, Package)!;
+export function PackageMaintainers({ entity, visible }: { entity: Entity; visible: boolean }) {
+  const { name } = useTrait(entity, Package)!;
   const opacity = useTransitionOpacity(visible, { duration: 0.65 });
   const leads = packages.find((pkg) => pkg.name === name)?.leadMaintainers;
+  // placeMaintainerPortraits drifts each portrait along the label while the fade reveals it
+  const parts = useMemo(() => ({ opacity, groups: [] as (Group | null)[] }), [opacity]);
+  const bind = useTraitBinding(entity, MaintainerParts, parts);
 
   return (
     <group name="package-maintainers" renderOrder={3}>
-      {leads?.map((login, leadIndex) => (
+      {leads?.map((login, index) => (
         <MaintainerPortrait
           key={login}
           name={name}
           profile={allProfiles.find((profile) => profile.login === login)!}
-          packageIndex={index}
-          index={leadIndex}
-          count={leads.length}
-          width={width}
-          height={height}
           opacity={opacity}
+          onMount={bind('groups', index)}
         />
       ))}
     </group>
@@ -47,54 +36,20 @@ export function PackageMaintainers({
 function MaintainerPortrait({
   name,
   profile,
-  packageIndex,
-  index,
-  count,
-  width,
-  height,
   opacity,
+  onMount,
 }: {
   name: string;
   profile: (typeof allProfiles)[number];
-  packageIndex: number;
-  index: number;
-  count: number;
-  width: number;
-  height: number;
   opacity: ReturnType<typeof useTransitionOpacity>;
+  onMount: (group: Group | null) => void;
 }) {
   const texture = useTexture(profile.avatar, (texture) => {
     texture.colorSpace = SRGBColorSpace;
   });
-  const group = useRef<Group>(null);
-  const placement = useMemo(() => new Float32Array(4), []);
-
-  useFrame(
-    (state) => {
-      const portrait = group.current;
-      if (!portrait) return;
-      portrait.visible = opacity.value > 0;
-      if (!portrait.visible) return;
-
-      placeMaintainerPortrait(
-        placement,
-        width,
-        height,
-        0.22,
-        packageIndex,
-        index,
-        count,
-        state.elapsed
-      );
-      portrait.visible = placement[3] > 0;
-      portrait.position.set(placement[0], placement[1], placement[2]);
-      portrait.scale.setScalar(placement[3] * (0.85 + opacity.value * 0.15));
-    },
-    { priority: 0.1 }
-  );
 
   return (
-    <group ref={group} name={`maintainer-${name}-${profile.login}`} visible={false} renderOrder={3}>
+    <group ref={onMount} name={`maintainer-${name}-${profile.login}`} visible={false} renderOrder={3}>
       <mesh renderOrder={0}>
         <circleGeometry args={[1.075, 48]} />
         <meshBasicNodeMaterial

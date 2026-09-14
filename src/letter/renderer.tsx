@@ -81,33 +81,30 @@ export function LetterRenderer() {
     { phase: 'finish' }
   );
 
-  useFrame(
-    ({ renderer, camera, scene }) => {
-      if (!group) return;
-      // Three owns the mounted object's mutable visibility.
-      // oxlint-disable-next-line react/immutability
-      group.visible = opacity.value > 0 || (prepared === group && painted !== group);
-      if (prepared === group || pending.current === group || !renderer.hasInitialized()) return;
+  useFrame(({ renderer, camera, scene }) => {
+    if (!group) return;
+    // Three owns the mounted object's mutable visibility.
+    // oxlint-disable-next-line react/immutability
+    group.visible = opacity.value > 0 || (prepared === group && painted !== group);
+    if (prepared === group || pending.current === group || !renderer.hasInitialized()) return;
 
-      let committed = 0;
-      group.traverse((child) => {
-        if (child instanceof GlyphText && child.commitState().status === 'committed') committed++;
-      });
-      if (letters.length === 0 || committed !== letters.length) return;
+    let committed = 0;
+    group.traverse((child) => {
+      if (child instanceof GlyphText && child.commitState().status === 'committed') committed++;
+    });
+    if (letters.length === 0 || committed !== letters.length) return;
 
-      // Text layout and GPU compilation must finish before the first fade starts.
-      pending.current = group;
-      void warmUp(renderer, group, camera, scene)?.then(
-        () => {
-          if (!group.disposed) setPrepared(group);
-        },
-        (error: unknown) => {
-          if (!group.disposed) setError(error);
-        }
-      );
-    },
-    { priority: -0.6 }
-  );
+    // Text layout and GPU compilation must finish before the first fade starts.
+    pending.current = group;
+    void warmUp(renderer, group, camera, scene)?.then(
+      () => {
+        if (!group.disposed) setPrepared(group);
+      },
+      (error: unknown) => {
+        if (!group.disposed) setError(error);
+      }
+    );
+  });
 
   if (error) throw error;
 

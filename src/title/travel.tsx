@@ -1,8 +1,8 @@
-import { useFrame } from '@react-three/fiber/webgpu';
 import { useMemo, useRef } from 'react';
 import { float, smoothstep, uv } from 'three/tsl';
 import { DynamicDrawUsage, Vector3, type InstancedMesh } from 'three/webgpu';
 import { createTitleTrails, updateTitleTrails } from './utils/trails.js';
+import { useFrameStep, type FrameStep } from '../view/hooks.js';
 import type { useTransitionOpacity } from '../view/use-transition-opacity.js';
 import type { useTitleFlight } from './use-flight.js';
 import type { usePortal } from './use-portal.js';
@@ -13,11 +13,13 @@ export function TitleTravel({
   depth,
   flight,
   portal,
+  steps,
 }: {
   opacity: ReturnType<typeof useTransitionOpacity>;
   depth: number;
   flight: ReturnType<typeof useTitleFlight>['motion'];
   portal: ReturnType<typeof usePortal>;
+  steps: Set<FrameStep>;
 }) {
   const mesh = useRef<InstancedMesh>(null);
   const trails = useMemo(() => createTitleTrails(480), []);
@@ -29,29 +31,26 @@ export function TitleTravel({
     return core.mul(trail).mul(opacity).mul(portal.outside).mul(0.7);
   }, [opacity, portal.outside]);
 
-  useFrame(
-    (state) => {
-      if (!mesh.current) return;
-      mesh.current.visible =
-        opacity.value > 0 && flight.current.boost > 0 && portal.progress.value < 1;
-      if (!mesh.current.visible) return;
-      origin.setZ(depth);
-      const { width, height } = state.viewport.getCurrentViewport(state.camera, origin);
-      updateTitleTrails(
-        trails,
-        flight.current.time,
-        flight.current.boost,
-        width,
-        height,
-        state.size.height,
-        depth,
-        portal.radius.value
-      );
-      mesh.current.count = trails.count;
-      mesh.current.instanceMatrix.needsUpdate = true;
-    },
-    { priority: -0.6 }
-  );
+  // Runs after the flight clock and portal steps of the title's frame callback
+  useFrameStep(steps, (state) => {
+    if (!mesh.current) return;
+    mesh.current.visible = opacity.value > 0 && flight.current.boost > 0 && portal.progress.value < 1;
+    if (!mesh.current.visible) return;
+    origin.setZ(depth);
+    const { width, height } = state.viewport.getCurrentViewport(state.camera, origin);
+    updateTitleTrails(
+      trails,
+      flight.current.time,
+      flight.current.boost,
+      width,
+      height,
+      state.size.height,
+      depth,
+      portal.radius.value
+    );
+    mesh.current.count = trails.count;
+    mesh.current.instanceMatrix.needsUpdate = true;
+  });
 
   return (
     <instancedMesh

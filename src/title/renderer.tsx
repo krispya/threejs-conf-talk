@@ -3,7 +3,7 @@ import { useQuery, useTrait } from 'koota/react';
 import { Title } from './traits.js';
 import { createTitleGeometry } from './utils/geometry.js';
 import { createTitleFragmentNodes, createTitleWireNodes } from './utils/materials.js';
-import { useViewBinding, useEntityVisible } from '../view/hooks.js';
+import { useViewBinding, useEntityVisible, type FrameStep } from '../view/hooks.js';
 import { Ref } from '../view/traits.js';
 import { useFrame, useLoader } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
@@ -34,9 +34,12 @@ function TitleView({ entity }: { entity: Entity }) {
   const { text } = useTrait(entity, Title)!;
   const visible = useEntityVisible(entity);
   const opacity = useTransitionOpacity(visible);
-  const { motion, scrim, speed, scenery, robotVisible, warpVisible } = useTitleFlight();
+  const flight = useTitleFlight();
+  const { motion, scrim, speed, scenery, robotVisible, warpVisible } = flight;
   const portal = usePortal();
   const glitch = useTitleGlitch();
+  // Child views register their steps here and run after the flight, portal, and glitch clocks
+  const steps = useMemo(() => new Set<FrameStep>(), []);
   const flightOpacity = useTransitionOpacity(visible && !robotVisible, {
     duration: warpVisible || !visible ? 0.28 : undefined,
   });
@@ -105,30 +108,35 @@ function TitleView({ entity }: { entity: Entity }) {
     [entity, bindView]
   );
 
-  useFrame(
-    (state, delta) => {
-      const root = entity.get(Ref);
-      if (!root || !lettering.current) return;
+  // One callback orders the title's clocks, its lettering, and the child steps within a frame
+  useFrame((state, delta) => {
+    flight.step(state, delta);
+    portal.step(state, delta);
+    glitch.step(state, delta);
+    const root = entity.get(Ref);
+    if (root && lettering.current) {
       if (visible && !approach.current.visible) approach.current.time = 0;
       approach.current.visible = visible;
       root.visible = opacity.value > 0;
       lettering.current.visible = letterOpacity.value > 0;
       if (scrimMesh.current) scrimMesh.current.visible = scrim.value > 0 || robotVisible;
-      if (!root.visible) return;
-      approach.current.time += delta * Math.min(1, motion.current.boost);
-      const distance = state.viewport.getCurrentViewport(state.camera, [0, 0, -260]);
-      // Approach a fixed limit so the monumental title always stays in the distance.
-      const arrival = lerp(0.94, 1, 1 - Math.exp(-approach.current.time / 240));
-      const size = Math.min((distance.width * 0.96) / 6.5, (distance.height * 0.75) / 2.8) * arrival;
-      lettering.current.scale.setScalar(size);
-      lettering.current.position.set(
-        -distance.width * 0.455 * arrival,
-        -size * 0.1,
-        horizon.z + easing.cubicIn(motion.current.warp) * 400
-      );
-    },
-    { priority: -0.6 }
-  );
+      if (root.visible) {
+        approach.current.time += delta * Math.min(1, motion.current.boost);
+        const distance = state.viewport.getCurrentViewport(state.camera, [0, 0, -260]);
+        // Approach a fixed limit so the monumental title always stays in the distance.
+        const arrival = lerp(0.94, 1, 1 - Math.exp(-approach.current.time / 240));
+        const size =
+          Math.min((distance.width * 0.96) / 6.5, (distance.height * 0.75) / 2.8) * arrival;
+        lettering.current.scale.setScalar(size);
+        lettering.current.position.set(
+          -distance.width * 0.455 * arrival,
+          -size * 0.1,
+          horizon.z + easing.cubicIn(motion.current.warp) * 400
+        );
+      }
+    }
+    for (const step of steps) step(state, delta);
+  });
 
   return (
     <group ref={handleInit} name="talk-title" visible={false}>
@@ -209,13 +217,20 @@ function TitleView({ entity }: { entity: Entity }) {
             </group>
           ))}
         </group>
-        <TitleTravel opacity={flightOpacity} depth={horizon.z - 40} flight={motion} portal={portal} />
+        <TitleTravel
+          opacity={flightOpacity}
+          depth={horizon.z - 40}
+          flight={motion}
+          portal={portal}
+          steps={steps}
+        />
         <TitleObjects
           opacity={objectOpacity}
           depth={horizon.z - 100}
           flight={motion}
           restart={warpVisible}
           portal={portal}
+          steps={steps}
         />
         <RobotReveal />
       </group>

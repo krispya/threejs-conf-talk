@@ -36,30 +36,27 @@ export function InitiativeFeatureChip({
     entrance.current = 0;
   }, [children, profile]);
 
-  useFrame(
-    (_, delta) => {
-      if (!group.current || !text.current) return;
-      entrance.current += Math.min(delta, 1 / 30);
-      const progress = Math.min(1, Math.max(0, (entrance.current - 0.35 - index * 0.18) / 0.55));
-      const reveal = 1 - (1 - progress) ** 3;
-      // Shader opacity follows each chip's staggered entrance and the shared label fade
-      // oxlint-disable-next-line react/immutability
-      opacity.value = reveal * visibility.value;
-      const elapsed = world.get(Time)!.elapsed;
-      group.current.visible = opacity.value > 0;
-      group.current.position.y =
-        ((count - 1) / 2 - index) * 0.66 -
-        (1 - reveal) * 0.3 +
-        Math.sin(elapsed * 0.9 + index * 1.7) * 0.035 * reveal;
-      group.current.scale.setScalar(0.84 + reveal * 0.16);
-      group.current.rotation.z =
-        -(1 - reveal) * 0.045 + Math.sin(elapsed * 0.65 + index * 1.7) * 0.015 * reveal;
-      if (text.current.style.opacity !== opacity.value) {
-        text.current.set({ style: { ...text.current.style, opacity: opacity.value } });
-      }
-    },
-    { priority: -0.7 }
-  );
+  useFrame((_, delta) => {
+    if (!group.current || !text.current) return;
+    entrance.current += Math.min(delta, 1 / 30);
+    const progress = Math.min(1, Math.max(0, (entrance.current - 0.35 - index * 0.18) / 0.55));
+    const reveal = 1 - (1 - progress) ** 3;
+    // Shader opacity follows each chip's staggered entrance and the shared label fade
+    // oxlint-disable-next-line react/immutability
+    opacity.value = reveal * visibility.value;
+    const elapsed = world.get(Time)!.elapsed;
+    group.current.visible = opacity.value > 0;
+    group.current.position.y =
+      ((count - 1) / 2 - index) * 0.66 -
+      (1 - reveal) * 0.3 +
+      Math.sin(elapsed * 0.9 + index * 1.7) * 0.035 * reveal;
+    group.current.scale.setScalar(0.84 + reveal * 0.16);
+    group.current.rotation.z =
+      -(1 - reveal) * 0.045 + Math.sin(elapsed * 0.65 + index * 1.7) * 0.015 * reveal;
+    if (text.current.style.opacity !== opacity.value) {
+      text.current.set({ style: { ...text.current.style, opacity: opacity.value } });
+    }
+  });
 
   return (
     <group ref={group} visible={false}>

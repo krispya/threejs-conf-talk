@@ -4,36 +4,74 @@ import { useWorld } from 'koota/react';
 import { useMemo } from 'react';
 import { profiles } from './profile/data.js';
 import { advanceTimeline } from './timeline/systems.js';
-import { placeProfiles, focusProfiles, wanderProfiles } from './profile/systems.js';
+import {
+  animateProfiles,
+  layoutTeamConnections,
+  placeProfiles,
+  focusProfiles,
+  wanderProfiles,
+} from './profile/systems.js';
 import { updateTime } from './time/systems.js';
 import { moveCamera, updateBounds } from './camera/systems.js';
-import { resizePackages, placePackages } from './package/systems.js';
+import {
+  animateDownloadCounters,
+  animateFeatureChips,
+  animatePackages,
+  placeMaintainerPortraits,
+  placePackages,
+  resizePackages,
+} from './package/systems.js';
 import { updateAnchors } from './letter/systems.js';
 import { floatBodies } from './floating/systems.js';
-import { syncTransforms } from './view/systems.js';
+import { syncTransforms, syncTransitionUniforms } from './view/systems.js';
+import { captureBackdrop } from './view/glass/systems.js';
+import { composeShowreel } from './background/systems.js';
 import { advanceTransitions } from './transition/systems.js';
 
-// The application owns the order in which domain systems run.
+// The application owns the order in which domain systems run. Systems run ahead of every view
+// callback, which keeps the default priority, and captures that read the finished frame run last.
 export function FrameLoop() {
   const world = useWorld();
   const profileLayout = useMemo(() => createProfileLayout(profiles.length), []);
 
-  useFrame((state, delta) => {
-    updateTime(world, delta, state.elapsed);
-    advanceTimeline(world);
-    advanceTransitions(world);
-    moveCamera(world);
-    resizePackages(world);
-    updateAnchors(world);
-    placePackages(world);
-    placeProfiles(world, profileLayout);
-    floatBodies(world);
-    focusProfiles(world);
-    wanderProfiles(world);
-    syncTransforms(world);
+  useFrame(
+    (state, delta) => {
+      updateTime(world, delta, state.elapsed);
+      advanceTimeline(world);
+      advanceTransitions(world);
+      syncTransitionUniforms(world);
+      moveCamera(world);
+      resizePackages(world);
+      updateAnchors(world);
+      placePackages(world);
+      placeProfiles(world, profileLayout);
+      floatBodies(world);
+      focusProfiles(world);
+      wanderProfiles(world);
+      syncTransforms(world);
+      animateProfiles(world);
+      // Package attachments follow the sphere placed by syncTransforms and animatePackages
+      animatePackages(world);
+      animateDownloadCounters(world);
+      animateFeatureChips(world);
+      placeMaintainerPortraits(world);
 
-    updateBounds(world, state.viewport.getCurrentViewport(state.camera));
-  });
+      updateBounds(world, state.viewport.getCurrentViewport(state.camera));
+    },
+    { priority: 1 }
+  );
+
+  // Captures read the finished frame, so they run after every view callback in this order
+  useFrame(
+    (state) => {
+      layoutTeamConnections(world, state.camera, state.scene, (target) =>
+        state.viewport.getCurrentViewport(state.camera, target)
+      );
+      composeShowreel(world, state.renderer);
+      captureBackdrop(world, state.renderer, state.scene, state.camera, state.frame);
+    },
+    { priority: -1 }
+  );
 
   return null;
 }

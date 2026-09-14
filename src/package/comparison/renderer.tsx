@@ -49,45 +49,42 @@ export function CodeComparisonRenderer() {
     });
   }, [visible, data?.id, data?.packageEntry, timing]);
 
-  useFrame(
-    (state) => {
-      if (!row.current) return;
-      const { width, height } = state.viewport.getCurrentViewport(state.camera, [0, 0, 0]);
-      const scale = Math.min((width * 0.92) / 16.6, (height * 0.8) / 4.8);
-      row.current.scale.setScalar(scale);
-      const offscreen = height / (2 * scale) + 3.2;
-      const now = world.get(Time)!.elapsed;
-      const elapsed = now - (timing?.startedAt ?? 0);
+  useFrame((state) => {
+    if (!row.current) return;
+    const { width, height } = state.viewport.getCurrentViewport(state.camera, [0, 0, 0]);
+    const scale = Math.min((width * 0.92) / 16.6, (height * 0.8) / 4.8);
+    row.current.scale.setScalar(scale);
+    const offscreen = height / (2 * scale) + 3.2;
+    const now = world.get(Time)!.elapsed;
+    const elapsed = now - (timing?.startedAt ?? 0);
 
-      motion.current.forEach((item, index) => {
-        const group = items.current[index];
-        if (!group) return;
-        const progress = item.duration <= 0 ? 1 : clamp((elapsed - item.delay) / item.duration, 0, 1);
-        item.value = lerp(
-          item.from,
-          item.target,
-          visible ? easing.cubicOut(progress) : easing.cubicInOut(progress)
-        );
-        group.position.y = offscreen * item.value;
-        group.visible = Math.abs(item.value) < 1;
-        if (!group.visible) return;
+    motion.current.forEach((item, index) => {
+      const group = items.current[index];
+      if (!group) return;
+      const progress = item.duration <= 0 ? 1 : clamp((elapsed - item.delay) / item.duration, 0, 1);
+      item.value = lerp(
+        item.from,
+        item.target,
+        visible ? easing.cubicOut(progress) : easing.cubicInOut(progress)
+      );
+      group.position.y = offscreen * item.value;
+      group.visible = Math.abs(item.value) < 1;
+      if (!group.visible) return;
 
-        const floating = group.children[0];
-        const drift = now * 0.4 + index * 2.4;
-        floating.position.set(
-          Math.sin(drift * 0.7) * (index === 1 ? 0.012 : 0.06),
-          Math.sin(drift) * (index === 3 ? 0.18 : 0.12),
-          Math.cos(drift * 0.5) * 0.03
-        );
-        floating.rotation.set(
-          Math.sin(drift * 0.6) * 0.012,
-          Math.cos(drift * 0.4) * (index === 1 ? 0.2 : 0.018),
-          Math.sin(drift * 0.8) * (index === 1 ? 0.08 : 0.01)
-        );
-      });
-    },
-    { priority: -0.6 }
-  );
+      const floating = group.children[0];
+      const drift = now * 0.4 + index * 2.4;
+      floating.position.set(
+        Math.sin(drift * 0.7) * (index === 1 ? 0.012 : 0.06),
+        Math.sin(drift) * (index === 3 ? 0.18 : 0.12),
+        Math.cos(drift * 0.5) * 0.03
+      );
+      floating.rotation.set(
+        Math.sin(drift * 0.6) * 0.012,
+        Math.cos(drift * 0.4) * (index === 1 ? 0.2 : 0.018),
+        Math.sin(drift * 0.8) * (index === 1 ? 0.08 : 0.01)
+      );
+    });
+  });
 
   return (
     <group ref={row} name="code-comparison">

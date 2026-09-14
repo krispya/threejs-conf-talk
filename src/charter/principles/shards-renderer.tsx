@@ -138,26 +138,23 @@ export function PrincipleShardsRenderer({
     };
   }, [center, covered, presence, progress]);
 
-  useFrame(
-    () => {
-      if (!mesh.current) return;
-      if (!shards.current) {
-        const geometries: BufferGeometry[] = [];
-        for (const { word, y, text } of words.current) {
-          if (!text || text.commitState().status !== 'committed') return;
-          const outline = createWordGeometry(font, word, text.glyphs(), 0, y);
-          if (outline) geometries.push(outline);
-        }
-        if (geometries.length === 0) return;
-        shards.current = createShardGeometry(mergeGeometries(geometries), 5.2);
-        mesh.current.geometry = shards.current;
-        void warmUp(renderer, mesh.current, camera, scene);
+  useFrame(() => {
+    if (!mesh.current) return;
+    if (!shards.current) {
+      const geometries: BufferGeometry[] = [];
+      for (const { word, y, text } of words.current) {
+        if (!text || text.commitState().status !== 'committed') return;
+        const outline = createWordGeometry(font, word, text.glyphs(), 0, y);
+        if (outline) geometries.push(outline);
       }
-      mesh.current.visible = presence.value > 0;
-      if (solid.current) solid.current.visible = mesh.current.visible;
-    },
-    { priority: -0.6 }
-  );
+      if (geometries.length === 0) return;
+      shards.current = createShardGeometry(mergeGeometries(geometries), 5.2);
+      mesh.current.geometry = shards.current;
+      void warmUp(renderer, mesh.current, camera, scene);
+    }
+    mesh.current.visible = presence.value > 0;
+    if (solid.current) solid.current.visible = mesh.current.visible;
+  });
 
   return (
     <>

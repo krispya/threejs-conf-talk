@@ -169,179 +169,171 @@ export function InitiativeRenderer() {
   }, [renderer, camera, scene, resources, portal, glade]);
   const nodes = useMemo(() => createInitiativePortalNodes(resources, opacity), [resources, opacity]);
 
-  useFrame(
-    (state, delta) => {
-      const media = mediaRef.current;
-      if (!mesh.current || !media) return;
-      const timeline = world.queryFirst(Timeline);
-      const screen = timeline?.targetFor(ActiveScreen);
-      const current = screen?.get(Screen);
-      const fallingNow = !!current?.initiativePortalVisible;
-      const insideNow = !!current?.initiativesVisible;
-      const timing = timeline?.get(Timeline);
-      if (insideNow && !arrival.current.inside) {
-        arrival.current.startedAt = timing?.startedAt ?? world.get(Time)!.elapsed;
-      }
-      arrival.current.inside = insideNow;
-      if (!fallingNow && lens.current) {
-        lens.current.camera.fov = lens.current.fov;
-        lens.current.camera.updateProjectionMatrix();
-        lens.current = null;
-      }
-      mesh.current.visible = fallingNow || insideNow || opacity.value > 0;
-      // The preview is opaque across the whole frame once the glade is reached and faded in
-      // oxlint-disable-next-line react/immutability
-      initiativeCover.value = insideNow && !fallingNow && opacity.value >= 1 ? 1 : 0;
-      const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0);
-      const arrivalElapsed = world.get(Time)!.elapsed - arrival.current.startedAt;
-      const conjure = insideNow ? portalConjureMotion(arrivalElapsed) : null;
-      // Keep the opening shot paused until the footage starts to appear
-      media.setPlaying(conjure !== null && conjure.reveal > 0);
-      if (media.updateChannel(delta)) {
-        void warmUp(renderer, media.mesh, resources.camera, resources.scene, resources.target);
-      }
-      if (!mesh.current.visible) return;
-      // The preview camera rests just outside the ring so the stones frame the opening
-      let dolly = 4.4;
-      let snap = false;
-      // TSL uniforms and the preview camera carry mutable render state outside React
-      /* oxlint-disable react/immutability */
-      glade.phase.value = world.get(Time)!.elapsed;
-      if (fallingNow) {
-        const motion = portalFallMotion(
-          elapsed,
-          timing!.duration,
-          screen!.get(ScreenTransition)!.cameraDelay
-        );
-        const camera = state.camera as PerspectiveCamera;
-        lens.current ??= { camera, fov: world.queryFirst(Camera)?.get(Camera)?.fov ?? camera.fov };
-        camera.fov = lens.current.fov + motion.fov;
-        camera.rotation.z += motion.bank;
-        camera.updateProjectionMatrix();
-        camera.updateMatrixWorld();
-        // The opening occupies PMNDRS's world position and grows as the camera returns
-        const distance = camera.position.z;
-        if (distance > 0) {
-          resources.origin.set(0, 0, 0).project(camera);
-          resources.center.value.set(0.5 + resources.origin.x * 0.5, 0.5 - resources.origin.y * 0.5);
-        } else {
-          resources.center.value.set(0.5, 0.5);
-        }
-        resources.radius.value =
-          distance > 0
-            ? (6.8 * motion.open * motion.radius) /
-              (Math.max(0.1, distance) * 2 * Math.tan((camera.fov * Math.PI) / 360))
-            : 3;
-        resources.glow.value = motion.open * motion.energy;
-        resources.burst.value = motion.burst;
-        resources.spin.value = motion.spin;
-        resources.phase.value = clamp(
-          (elapsed - 0.8) / Math.max(0.001, timing!.duration - 0.8),
-          0,
-          1
-        );
-        dolly = 4.4 + Math.max(0, distance) * 0.22;
-        snap = motion.open === 0;
-      } else if (insideNow) {
+  useFrame((state, delta) => {
+    const media = mediaRef.current;
+    if (!mesh.current || !media) return;
+    const timeline = world.queryFirst(Timeline);
+    const screen = timeline?.targetFor(ActiveScreen);
+    const current = screen?.get(Screen);
+    const fallingNow = !!current?.initiativePortalVisible;
+    const insideNow = !!current?.initiativesVisible;
+    const timing = timeline?.get(Timeline);
+    if (insideNow && !arrival.current.inside) {
+      arrival.current.startedAt = timing?.startedAt ?? world.get(Time)!.elapsed;
+    }
+    arrival.current.inside = insideNow;
+    if (!fallingNow && lens.current) {
+      lens.current.camera.fov = lens.current.fov;
+      lens.current.camera.updateProjectionMatrix();
+      lens.current = null;
+    }
+    mesh.current.visible = fallingNow || insideNow || opacity.value > 0;
+    // The preview is opaque across the whole frame once the glade is reached and faded in
+    // oxlint-disable-next-line react/immutability
+    initiativeCover.value = insideNow && !fallingNow && opacity.value >= 1 ? 1 : 0;
+    const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0);
+    const arrivalElapsed = world.get(Time)!.elapsed - arrival.current.startedAt;
+    const conjure = insideNow ? portalConjureMotion(arrivalElapsed) : null;
+    // Keep the opening shot paused until the footage starts to appear
+    media.setPlaying(conjure !== null && conjure.reveal > 0);
+    if (media.updateChannel(delta)) {
+      void warmUp(renderer, media.mesh, resources.camera, resources.scene, resources.target);
+    }
+    if (!mesh.current.visible) return;
+    // The preview camera rests just outside the ring so the stones frame the opening
+    let dolly = 4.4;
+    let snap = false;
+    // TSL uniforms and the preview camera carry mutable render state outside React
+    /* oxlint-disable react/immutability */
+    glade.phase.value = world.get(Time)!.elapsed;
+    if (fallingNow) {
+      const motion = portalFallMotion(
+        elapsed,
+        timing!.duration,
+        screen!.get(ScreenTransition)!.cameraDelay
+      );
+      const camera = state.camera as PerspectiveCamera;
+      lens.current ??= { camera, fov: world.queryFirst(Camera)?.get(Camera)?.fov ?? camera.fov };
+      camera.fov = lens.current.fov + motion.fov;
+      camera.rotation.z += motion.bank;
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+      // The opening occupies PMNDRS's world position and grows as the camera returns
+      const distance = camera.position.z;
+      if (distance > 0) {
+        resources.origin.set(0, 0, 0).project(camera);
+        resources.center.value.set(0.5 + resources.origin.x * 0.5, 0.5 - resources.origin.y * 0.5);
+      } else {
         resources.center.value.set(0.5, 0.5);
-        resources.radius.value = 3;
-        resources.glow.value = 0;
-        resources.burst.value = 0;
-        resources.phase.value = 1;
       }
-      // The footage is conjured once the glade is reached and drawn back in when it is left
-      const settle = Math.exp(-delta / 0.12);
-      media.open.value = conjure ? conjure.open : media.open.value * settle;
-      media.reveal.value = conjure ? conjure.reveal : media.reveal.value * settle;
-      media.energy.value = conjure ? conjure.energy : 1;
-      media.phase.value = world.get(Time)!.elapsed;
-      media.mesh.visible =
-        !fallingNow && (conjure !== null || media.open.value > 0.001) && media.video.readyState >= 2;
-      if (fallingNow || insideNow) {
-        const light = portalArrivalLighting(
-          insideNow ? arrivalElapsed : elapsed,
-          fallingNow,
-          timing!.duration,
-          screen!.get(ScreenTransition)!.cameraDelay
-        );
-        resources.lamp.intensity = 22 * (0.75 + media.energy.value * 0.25) * light.portal;
-        resources.moon.intensity = 1.05 * light.environment;
-        resources.sky.intensity = 0.65 * light.environment;
-        resources.auroraFill.intensity = 3.8 * light.environment;
-        resources.portalFill.intensity = 2.6 * light.environment;
-        resources.skyReveal.value = light.sky;
-        resources.environmentReveal.value = light.environment;
-        (resources.scene.fog as Fog).color.set('#28252d').multiplyScalar(light.sky);
+      resources.radius.value =
+        distance > 0
+          ? (6.8 * motion.open * motion.radius) /
+            (Math.max(0.1, distance) * 2 * Math.tan((camera.fov * Math.PI) / 360))
+          : 3;
+      resources.glow.value = motion.open * motion.energy;
+      resources.burst.value = motion.burst;
+      resources.spin.value = motion.spin;
+      resources.phase.value = clamp((elapsed - 0.8) / Math.max(0.001, timing!.duration - 0.8), 0, 1);
+      dolly = 4.4 + Math.max(0, distance) * 0.22;
+      snap = motion.open === 0;
+    } else if (insideNow) {
+      resources.center.value.set(0.5, 0.5);
+      resources.radius.value = 3;
+      resources.glow.value = 0;
+      resources.burst.value = 0;
+      resources.phase.value = 1;
+    }
+    // The footage is conjured once the glade is reached and drawn back in when it is left
+    const settle = Math.exp(-delta / 0.12);
+    media.open.value = conjure ? conjure.open : media.open.value * settle;
+    media.reveal.value = conjure ? conjure.reveal : media.reveal.value * settle;
+    media.energy.value = conjure ? conjure.energy : 1;
+    media.phase.value = world.get(Time)!.elapsed;
+    media.mesh.visible =
+      !fallingNow && (conjure !== null || media.open.value > 0.001) && media.video.readyState >= 2;
+    if (fallingNow || insideNow) {
+      const light = portalArrivalLighting(
+        insideNow ? arrivalElapsed : elapsed,
+        fallingNow,
+        timing!.duration,
+        screen!.get(ScreenTransition)!.cameraDelay
+      );
+      resources.lamp.intensity = 22 * (0.75 + media.energy.value * 0.25) * light.portal;
+      resources.moon.intensity = 1.05 * light.environment;
+      resources.sky.intensity = 0.65 * light.environment;
+      resources.auroraFill.intensity = 3.8 * light.environment;
+      resources.portalFill.intensity = 2.6 * light.environment;
+      resources.skyReveal.value = light.sky;
+      resources.environmentReveal.value = light.environment;
+      (resources.scene.fog as Fog).color.set('#28252d').multiplyScalar(light.sky);
+    }
+    // The preview camera trails its goal slightly, so the speed of the fall carries across
+    // the crossing and the glade settles to rest instead of freezing when the screen changes
+    const position = resources.camera.position;
+    position.z = snap ? dolly : position.z + (dolly - position.z) * (1 - Math.exp(-delta / 0.14));
+    // Keep the fog behind the stone ring as the preview camera approaches from far away
+    (resources.scene.fog as Fog).near = position.z + 0.1;
+    (resources.scene.fog as Fog).far = position.z + 9.6;
+    /* oxlint-enable react/immutability */
+    resources.camera.updateMatrixWorld();
+    if (profileRef.current) {
+      profileRef.current.position.y = Math.sin(glade.phase.value * 1.3) * 0.1 * labelOpacity.value;
+      profileRef.current.rotation.z = Math.sin(glade.phase.value * 0.8) * 0.035 * labelOpacity.value;
+    }
+    if (label.current && labelText.current) {
+      label.current.visible = labelOpacity.value > 0;
+      label.current.position.set(0, 0, resources.camera.position.z - 1);
+      const viewport = state.viewport.getCurrentViewport(resources.camera, label.current.position);
+      const scale = Math.min(
+        viewport.height / 9,
+        viewport.width /
+          Math.max(
+            labelWidth + (profile ? 1.9 : 1),
+            installWidth + 1.9,
+            chipsWidth + (chips.some((chip) => chip.profile) ? 0.58 : 0) + 1.9
+          )
+      );
+      label.current.scale.setScalar(scale * (0.8 + 0.2 * labelOpacity.value));
+      label.current.position.x = profile ? 0.45 * scale : 0;
+      label.current.position.y =
+        viewport.height / 2 - (0.7 + 0.65 * (1 - labelOpacity.value)) * scale;
+      if (chipColumn.current) {
+        // Project the portal opening onto the label plane so the column stays centered
+        media.mesh.getWorldPosition(chipColumn.current.position).project(resources.camera);
+        chipColumn.current.position.z = resources.origin
+          .copy(label.current.position)
+          .project(resources.camera).z;
+        chipColumn.current.position.unproject(resources.camera);
+        label.current.updateWorldMatrix(true, false);
+        label.current.worldToLocal(chipColumn.current.position);
       }
-      // The preview camera trails its goal slightly, so the speed of the fall carries across
-      // the crossing and the glade settles to rest instead of freezing when the screen changes
-      const position = resources.camera.position;
-      position.z = snap ? dolly : position.z + (dolly - position.z) * (1 - Math.exp(-delta / 0.14));
-      // Keep the fog behind the stone ring as the preview camera approaches from far away
-      (resources.scene.fog as Fog).near = position.z + 0.1;
-      (resources.scene.fog as Fog).far = position.z + 9.6;
-      /* oxlint-enable react/immutability */
-      resources.camera.updateMatrixWorld();
-      if (profileRef.current) {
-        profileRef.current.position.y = Math.sin(glade.phase.value * 1.3) * 0.1 * labelOpacity.value;
-        profileRef.current.rotation.z =
-          Math.sin(glade.phase.value * 0.8) * 0.035 * labelOpacity.value;
+      if (labelText.current.style.opacity !== labelOpacity.value) {
+        labelText.current.set({
+          style: { ...labelText.current.style, opacity: labelOpacity.value },
+        });
       }
-      if (label.current && labelText.current) {
-        label.current.visible = labelOpacity.value > 0;
-        label.current.position.set(0, 0, resources.camera.position.z - 1);
-        const viewport = state.viewport.getCurrentViewport(resources.camera, label.current.position);
-        const scale = Math.min(
-          viewport.height / 9,
-          viewport.width /
-            Math.max(
-              labelWidth + (profile ? 1.9 : 1),
-              installWidth + 1.9,
-              chipsWidth + (chips.some((chip) => chip.profile) ? 0.58 : 0) + 1.9
-            )
-        );
-        label.current.scale.setScalar(scale * (0.8 + 0.2 * labelOpacity.value));
-        label.current.position.x = profile ? 0.45 * scale : 0;
-        label.current.position.y =
-          viewport.height / 2 - (0.7 + 0.65 * (1 - labelOpacity.value)) * scale;
-        if (chipColumn.current) {
-          // Project the portal opening onto the label plane so the column stays centered
-          media.mesh.getWorldPosition(chipColumn.current.position).project(resources.camera);
-          chipColumn.current.position.z = resources.origin
-            .copy(label.current.position)
-            .project(resources.camera).z;
-          chipColumn.current.position.unproject(resources.camera);
-          label.current.updateWorldMatrix(true, false);
-          label.current.worldToLocal(chipColumn.current.position);
-        }
-        if (labelText.current.style.opacity !== labelOpacity.value) {
-          labelText.current.set({
-            style: { ...labelText.current.style, opacity: labelOpacity.value },
-          });
-        }
-        if (installText.current && installText.current.style.opacity !== labelOpacity.value) {
-          installText.current.set({
-            style: { ...installText.current.style, opacity: labelOpacity.value },
-          });
-        }
+      if (installText.current && installText.current.style.opacity !== labelOpacity.value) {
+        installText.current.set({
+          style: { ...installText.current.style, opacity: labelOpacity.value },
+        });
       }
-      const target = renderer.getRenderTarget();
-      const autoClear = renderer.autoClear;
-      const alpha = renderer.getClearAlpha();
-      renderer.getClearColor(resources.clearColor);
-      try {
-        sky.render(renderer, resources.camera, resources.target.width, resources.target.height);
-        renderer.setRenderTarget(resources.target);
-        renderer.autoClear = true;
-        renderer.render(resources.scene, resources.camera);
-      } finally {
-        renderer.setRenderTarget(target);
-        renderer.setClearColor(resources.clearColor, alpha);
-        renderer.autoClear = autoClear;
-      }
-    },
-    { priority: -0.6 }
-  );
+    }
+    const target = renderer.getRenderTarget();
+    const autoClear = renderer.autoClear;
+    const alpha = renderer.getClearAlpha();
+    renderer.getClearColor(resources.clearColor);
+    try {
+      sky.render(renderer, resources.camera, resources.target.width, resources.target.height);
+      renderer.setRenderTarget(resources.target);
+      renderer.autoClear = true;
+      renderer.render(resources.scene, resources.camera);
+    } finally {
+      renderer.setRenderTarget(target);
+      renderer.setClearColor(resources.clearColor, alpha);
+      renderer.autoClear = autoClear;
+    }
+  });
 
   return (
     <>

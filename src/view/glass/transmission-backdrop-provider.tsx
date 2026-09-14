@@ -1,7 +1,7 @@
-import { useFrame } from '@react-three/fiber/webgpu';
 import { createContext, useContext, useLayoutEffect, type ReactNode, useMemo } from 'react';
+import { useSpawnedParts } from '../hooks.js';
+import { Backdrop } from '../traits.js';
 import {
-  captureTransmissionBackdrop,
   createTransmissionBackdrop,
   disposeTransmissionBackdrop,
   type TransmissionBackdrop,
@@ -9,7 +9,10 @@ import {
 
 const BackdropContext = createContext<TransmissionBackdrop | null>(null);
 
-/** Capture quality and scheduling belong to the scene, not to individual materials. */
+/**
+ * Capture quality belongs to the scene, not to individual materials. `captureBackdrop` runs
+ * the capture after every view callback has placed its objects for the frame.
+ */
 export function TransmissionBackdropProvider({
   children,
   resolution = 0.85,
@@ -28,14 +31,7 @@ export function TransmissionBackdropProvider({
     /* oxlint-enable react/immutability */
   }, [backdrop, resolution, backsideResolution]);
   useLayoutEffect(() => () => disposeTransmissionBackdrop(backdrop), [backdrop]);
-  useFrame(
-    (state) => {
-      for (const material of backdrop.materials.keys())
-        material.transmissionUniforms.time.value = state.elapsed;
-      captureTransmissionBackdrop(backdrop, state.renderer, state.scene, state.camera, state.frame);
-    },
-    { priority: -1 }
-  );
+  useSpawnedParts(Backdrop, backdrop);
   return <BackdropContext value={backdrop}>{children}</BackdropContext>;
 }
 

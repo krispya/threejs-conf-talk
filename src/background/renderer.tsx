@@ -26,7 +26,8 @@ export function Background() {
   const ripples = usePortalRipples();
   const starsShader = useMemo(() => starfieldNode(nebula, ripples.uv), [nebula, ripples.uv]);
   const { data } = useActiveScreen();
-  const { progress: portalProgress, angle, distance, energy, edge, aperture } = usePortal();
+  const portalOpening = usePortal();
+  const { progress: portalProgress, angle, distance, energy, edge, aperture } = portalOpening;
   const solid = !data || data.background === 'solid';
   const closing = data?.background === 'blue';
   const opacity = useTransitionOpacity(data?.backgroundVisible ?? true);
@@ -107,7 +108,9 @@ export function Background() {
   const composed =
     variants[data?.warpVisible ? 'warp' : closing ? 'closing' : solid ? 'solid' : 'pastel'];
   const warmed = useRef<typeof variants | null>(null);
-  useFrame(() => {
+  useFrame((state, delta) => {
+    // The backdrop's own copy of the opening follows the same clock as the title's
+    portalOpening.step(state, delta);
     if (warmed.current === variants || !renderer.hasInitialized()) return;
     warmed.current = variants;
     const probe = new Group();

@@ -1,6 +1,5 @@
 import { useActiveScreen } from '../timeline/hooks.js';
-import { useFrame } from '@react-three/fiber/webgpu';
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   cameraProjectionMatrix,
   hash,
@@ -14,6 +13,7 @@ import {
   vec4,
   viewport,
 } from 'three/tsl';
+import type { FrameStep } from '../view/hooks.js';
 
 /** A rolling tape disturbance breaks into short digital slices, then settles. */
 export function useTitleGlitch() {
@@ -53,7 +53,9 @@ export function useTitleGlitch() {
     };
   }, []);
 
-  useFrame(
+  // The title view runs this step in its frame callback. The result stays referentially stable
+  // between screens because the title memoizes shader nodes on it.
+  const step = useCallback<FrameStep>(
     (state) => {
       // TSL uniforms carry mutable shader state outside React.
       /* oxlint-disable react/immutability */
@@ -93,8 +95,8 @@ export function useTitleGlitch() {
       }
       /* oxlint-enable react/immutability */
     },
-    { priority: -0.5 }
+    [effect, idle]
   );
 
-  return effect;
+  return useMemo(() => ({ ...effect, step }), [effect, step]);
 }

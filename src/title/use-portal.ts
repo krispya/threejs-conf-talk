@@ -7,8 +7,12 @@ import { useMemo } from 'react';
 import { atan, screenSize, screenUV, smoothstep, uniform, vec2, float } from 'three/tsl';
 import { Timeline, ActiveScreen, Screen, ScreenTransition } from '../timeline/traits.js';
 import { Vector2, Vector3, type Node } from 'three/webgpu';
+import type { FrameStep } from '../view/hooks.js';
 
-/** The same opening reveals the destination and clips the approaching scenery. */
+/**
+ * The same opening reveals the destination and clips the approaching scenery.
+ * The title view runs `step` in its frame callback ahead of the objects that read the opening.
+ */
 export function usePortal() {
   const world = useWorld();
   const { timeline, data } = useActiveScreen();
@@ -36,28 +40,24 @@ export function usePortal() {
     return { angle, distance, energy, edge, aperture, outside, mask: outside.greaterThan(0) };
   }, [progress, radius]);
 
-  useFrame(
-    (state) => {
-      // Hold the opening after crossing so the old scenery cannot reappear
-      /* oxlint-disable react/immutability */
-      progress.value = data?.warpVisible
-        ? clamp(
-            (world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - 1.15) /
-              Math.max(0.001, (timing?.duration ?? 0) - 1.15),
-            0,
-            1
-          )
-        : data?.titleVisible
-          ? 0
-          : 1;
-      radius.value =
-        progress.value ** 3 * (Math.hypot(state.size.width / state.size.height, 1) + 0.5);
-      /* oxlint-enable react/immutability */
-    },
-    { priority: -0.7 }
-  );
+  const step: FrameStep = (state) => {
+    // Hold the opening after crossing so the old scenery cannot reappear
+    /* oxlint-disable react/immutability */
+    progress.value = data?.warpVisible
+      ? clamp(
+          (world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - 1.15) /
+            Math.max(0.001, (timing?.duration ?? 0) - 1.15),
+          0,
+          1
+        )
+      : data?.titleVisible
+        ? 0
+        : 1;
+    radius.value = progress.value ** 3 * (Math.hypot(state.size.width / state.size.height, 1) + 0.5);
+    /* oxlint-enable react/immutability */
+  };
 
-  return { progress, radius, ...shape };
+  return { progress, radius, step, ...shape };
 }
 
 /** Traveling compression and expansion bend the sky around the portal's world position. */
@@ -110,24 +110,21 @@ export function usePortalRipples() {
     };
   }, [state]);
 
-  useFrame(
-    (frame) => {
-      const timeline = world.queryFirst(Timeline);
-      const screen = timeline?.targetFor(ActiveScreen);
-      // TSL uniforms carry mutable render state outside React
-      /* oxlint-disable react/immutability */
-      state.enabled.value =
-        screen?.get(Screen)?.initiativePortalVisible && frame.camera.position.z > 0 ? 1 : 0;
-      if (!state.enabled.value) return;
-      state.elapsed.value = world.get(Time)!.elapsed - timeline!.get(Timeline)!.startedAt;
-      state.release.value = screen!.get(ScreenTransition)!.cameraDelay - 0.5;
-      frame.camera.updateMatrixWorld();
-      state.origin.set(0, 0, 0).project(frame.camera);
-      state.center.value.set(0.5 + state.origin.x * 0.5, 0.5 - state.origin.y * 0.5);
-      /* oxlint-enable react/immutability */
-    },
-    { priority: -0.7 }
-  );
+  useFrame((frame) => {
+    const timeline = world.queryFirst(Timeline);
+    const screen = timeline?.targetFor(ActiveScreen);
+    // TSL uniforms carry mutable render state outside React
+    /* oxlint-disable react/immutability */
+    state.enabled.value =
+      screen?.get(Screen)?.initiativePortalVisible && frame.camera.position.z > 0 ? 1 : 0;
+    if (!state.enabled.value) return;
+    state.elapsed.value = world.get(Time)!.elapsed - timeline!.get(Timeline)!.startedAt;
+    state.release.value = screen!.get(ScreenTransition)!.cameraDelay - 0.5;
+    frame.camera.updateMatrixWorld();
+    state.origin.set(0, 0, 0).project(frame.camera);
+    state.center.value.set(0.5 + state.origin.x * 0.5, 0.5 - state.origin.y * 0.5);
+    /* oxlint-enable react/immutability */
+  });
 
   return nodes;
 }

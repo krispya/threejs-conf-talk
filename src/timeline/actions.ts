@@ -52,22 +52,20 @@ export const timelineActions = createActions((world) => {
         : -1,
     });
     cameraActions(world).setCameraTarget({ x: cameraX, y: cameraY, z: cameraZ });
+    const data = screen.get(Screen)!;
     const {
       titleVisible,
       lettersVisible,
-      packagesVisible,
-      packageNames,
       profilesVisible,
       focusedProfile,
       surroundingProfiles,
       recedingProfiles,
-      packageSizing,
       charterVisible,
       initiativesVisible,
-    } = screen.get(Screen)!;
+    } = data;
     titleActions(world).setTitleVisible(titleVisible);
     letterActions(world).setLettersVisible(lettersVisible);
-    packageActions(world).setPackagePresentation({ packagesVisible, packageNames, packageSizing });
+    packageActions(world).setPackagePresentation(data);
     profileActions(world).setProfilePresentation({
       profilesVisible,
       focusedProfile,

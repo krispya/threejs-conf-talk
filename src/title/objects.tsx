@@ -1,9 +1,9 @@
-import { useFrame } from '@react-three/fiber/webgpu';
 import { lerp } from 'math';
 import { mulberry32 } from 'math/random';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { color, mix, normalLocal, positionWorld, smoothstep } from 'three/tsl';
 import { Euler, Matrix4, Vector3, type InstancedMesh } from 'three/webgpu';
+import { useFrameStep, type FrameStep } from '../view/hooks.js';
 import type { useTransitionOpacity } from '../view/use-transition-opacity.js';
 import type { useTitleFlight } from './use-flight.js';
 import type { usePortal } from './use-portal.js';
@@ -15,12 +15,14 @@ export function TitleObjects({
   flight,
   restart,
   portal,
+  steps,
 }: {
   opacity: ReturnType<typeof useTransitionOpacity>;
   depth: number;
   flight: ReturnType<typeof useTitleFlight>['motion'];
   restart: boolean;
   portal: ReturnType<typeof usePortal>;
+  steps: Set<FrameStep>;
 }) {
   const shapes = useRef<InstancedMesh>(null);
   const emissionStart = useRef<number | null>(null);
@@ -64,47 +66,45 @@ export function TitleObjects({
     if (restart) emissionStart.current = flight.current.time;
   }, [restart, flight]);
 
-  useFrame(
-    (state, delta) => {
-      const mesh = shapes.current;
-      if (!mesh) return;
-      const presence = Math.min(1, flight.current.boost);
-      mesh.visible = opacity.value > 0 && presence > 0 && portal.progress.value < 1;
-      if (!mesh.visible) {
-        if (!restart) emissionStart.current = null;
-        return;
-      }
-      emissionStart.current ??= flight.current.time;
-      // Keep the tumble slow even when forward travel accelerates
-      rotationTime.current += delta;
-      transform.origin.setZ(depth);
-      const { width, height } = state.viewport.getCurrentViewport(state.camera, transform.origin);
-      objects.forEach((object, index) => {
-        // A fresh stream staggers births at the far plane before recycling passed debris.
-        const age =
-          (flight.current.time - emissionStart.current!) * object.speed * 1.25 - object.phase * 0.15;
-        const travel = age < 0 ? 0 : age % 1;
-        const drift = (flight.current.time / 8) * object.drift;
-        const phase = object.phase * Math.PI * 2;
-        transform.rotation.set(
-          rotationTime.current * object.spinX + phase,
-          rotationTime.current * object.spinY + phase * 0.7,
-          rotationTime.current * object.spinZ + phase * 1.3
-        );
-        // Keep distant objects tiny and amplify their size as they pass the camera.
-        transform.scale.setScalar(age < 0 ? 0 : object.size * lerp(1, 18, travel ** 3) * presence);
-        transform.matrix.makeRotationFromEuler(transform.rotation).scale(transform.scale);
-        transform.matrix.setPosition(
-          (Math.cos(object.angle) * object.radius * width) / 2 + Math.sin(drift + phase) * 0.8,
-          (Math.sin(object.angle) * object.radius * height) / 2 + Math.cos(drift * 0.7 + phase) * 0.6,
-          lerp(depth, state.camera.position.z + 16, travel)
-        );
-        mesh.setMatrixAt(index, transform.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-    },
-    { priority: -0.6 }
-  );
+  // Runs after the flight clock and portal steps of the title's frame callback
+  useFrameStep(steps, (state, delta) => {
+    const mesh = shapes.current;
+    if (!mesh) return;
+    const presence = Math.min(1, flight.current.boost);
+    mesh.visible = opacity.value > 0 && presence > 0 && portal.progress.value < 1;
+    if (!mesh.visible) {
+      if (!restart) emissionStart.current = null;
+      return;
+    }
+    emissionStart.current ??= flight.current.time;
+    // Keep the tumble slow even when forward travel accelerates
+    rotationTime.current += delta;
+    transform.origin.setZ(depth);
+    const { width, height } = state.viewport.getCurrentViewport(state.camera, transform.origin);
+    objects.forEach((object, index) => {
+      // A fresh stream staggers births at the far plane before recycling passed debris.
+      const age =
+        (flight.current.time - emissionStart.current!) * object.speed * 1.25 - object.phase * 0.15;
+      const travel = age < 0 ? 0 : age % 1;
+      const drift = (flight.current.time / 8) * object.drift;
+      const phase = object.phase * Math.PI * 2;
+      transform.rotation.set(
+        rotationTime.current * object.spinX + phase,
+        rotationTime.current * object.spinY + phase * 0.7,
+        rotationTime.current * object.spinZ + phase * 1.3
+      );
+      // Keep distant objects tiny and amplify their size as they pass the camera.
+      transform.scale.setScalar(age < 0 ? 0 : object.size * lerp(1, 18, travel ** 3) * presence);
+      transform.matrix.makeRotationFromEuler(transform.rotation).scale(transform.scale);
+      transform.matrix.setPosition(
+        (Math.cos(object.angle) * object.radius * width) / 2 + Math.sin(drift + phase) * 0.8,
+        (Math.sin(object.angle) * object.radius * height) / 2 + Math.cos(drift * 0.7 + phase) * 0.6,
+        lerp(depth, state.camera.position.z + 16, travel)
+      );
+      mesh.setMatrixAt(index, transform.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  });
 
   return (
     <group name="title-objects">

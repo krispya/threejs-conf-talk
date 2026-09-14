@@ -1,18 +1,21 @@
-import { useFrame } from '@react-three/fiber/webgpu';
-import { easing } from 'math/time';
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { atan, color, fwidth, hash, mix, smoothstep, time, uv, vec2 } from 'three/tsl';
 import type { Group } from 'three/webgpu';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import type { useTransitionOpacity } from '../view/use-transition-opacity.js';
 
-/** Flowing rays, expanding waves, and sparks radiate from the storyteller's portrait. */
-export function ProfileAura({ active, radius }: { active: boolean; radius: number }) {
-  const reveal = useTransitionOpacity(active, {
-    duration: active ? 1.8 : 0.55,
-    delay: active ? 0.3 : 0,
-    ease: easing.cubicInOut,
-  });
-  const group = useRef<Group>(null);
+/**
+ * Flowing rays, expanding waves, and sparks radiate from the storyteller's portrait.
+ * The portrait's view owns the reveal and registers the group so `animateProfiles` shows it.
+ */
+export function ProfileAura({
+  reveal,
+  radius,
+  onMount,
+}: {
+  reveal: ReturnType<typeof useTransitionOpacity>;
+  radius: number;
+  onMount: (group: Group | null) => void;
+}) {
   const aura = useMemo(() => {
     const point = uv().sub(0.5).mul(4);
     const distance = point.length();
@@ -94,15 +97,8 @@ export function ProfileAura({ active, radius }: { active: boolean; radius: numbe
     };
   }, [reveal]);
 
-  useFrame(
-    () => {
-      if (group.current) group.current.visible = reveal.value > 0;
-    },
-    { priority: -0.6 }
-  );
-
   return (
-    <group ref={group} name="story-profile-aura" visible={false}>
+    <group ref={onMount} name="story-profile-aura" visible={false}>
       <mesh position={[0, 0, -0.02]} renderOrder={-2.5}>
         <planeGeometry args={[(radius + 0.025) * 4, (radius + 0.025) * 4]} />
         <meshBasicNodeMaterial

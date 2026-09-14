@@ -1,35 +1,38 @@
 import { Size } from '../traits.js';
-import { useQuery, useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
-import { Timeline, ActiveScreen, Screen } from '../timeline/traits.js';
-import { Profile, ProfileFocus } from './traits.js';
-import { useViewBinding, useEntityVisible } from '../view/hooks.js';
+import { useActiveScreen } from '../timeline/hooks.js';
+import { useQuery, useTrait } from 'koota/react';
+import { Profile, ProfileParts, ProfilePresence } from './traits.js';
+import {
+  useViewBinding,
+  useEntityVisible,
+  useEntityPresent,
+  useTraitBinding,
+} from '../view/hooks.js';
 import { Anchor } from '../floating/traits.js';
-import { useFrame, useTexture, useThree } from '@react-three/fiber/webgpu';
+import { useTexture, useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { clamp, lerp } from 'math';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { easing } from 'math/time';
+import { useCallback, useEffect, useMemo } from 'react';
 import { color, mix, texture as textureNode, uniform } from 'three/tsl';
 import {
-  Color,
   SRGBColorSpace,
   type Group,
   type MeshBasicMaterial,
   type MeshBasicNodeMaterial,
 } from 'three/webgpu';
 import { allProfiles } from './data.js';
-import { getRevealTime, getTransitionProgress } from '../timeline/timing.js';
-import { profileArrival } from './utils/motion.js';
 import { ramp } from '../theme.js';
+import { useTransitionOpacity } from '../view/use-transition-opacity.js';
 import { ProfileAura } from './aura.js';
 
 export function ProfileRenderer() {
   const profiles = useQuery(Profile, Size);
-  const timeline = useQueryFirst(Timeline);
+  const { data } = useActiveScreen();
 
   return (
     <group name="contributors">
       {profiles.map((entity) => (
-        <ProfileView key={entity} entity={entity} timeline={timeline} />
+        <ProfileView key={entity} entity={entity} storyProfile={data?.storyProfile ?? ''} />
       ))}
     </group>
   );
@@ -37,12 +40,11 @@ export function ProfileRenderer() {
 
 for (const profile of allProfiles) useTexture.preload(profile.avatar);
 
-// Ring colors for a portrait in front and one that has receded behind the newcomers
-const light = new Color(ramp['light-25']);
-const shadow = new Color('#141726');
-
-function ProfileView({ entity, timeline }: { entity: Entity; timeline: Entity | undefined }) {
-  const world = useWorld();
+/**
+ * The portrait and its ring. `animateProfiles` scales and fades the registered parts from the
+ * presence the presentation action captured, and releases the view once it has left.
+ */
+function ProfileView({ entity, storyProfile }: { entity: Entity; storyProfile: string }) {
   const { login, avatar } = useTrait(entity, Profile)!;
   const { radius } = useTrait(entity, Size)!;
   const texture = useTexture(avatar, (texture) => {
@@ -60,95 +62,46 @@ function ProfileView({ entity, timeline }: { entity: Entity; timeline: Entity | 
     // Transparent avatar pixels belong to the portrait's white backing, not the video wall.
     return mix(mix(color('#ffffff'), image.rgb, image.a), color('#141726'), dim);
   }, [texture, dim]);
-  const timing = useTrait(timeline, Timeline);
-  const screen = useTarget(timeline, ActiveScreen);
-  const screenData = useTrait(screen, Screen);
-  const featured = screenData?.storyProfile === login;
-  // Ring screens share the ring's staggered spring for their fades
-  const focusing = Boolean(screenData?.focusedProfile || screenData?.surroundingProfiles.length);
+  const featured = storyProfile === login;
   const visible = useEntityVisible(entity);
-  const [present, setPresent] = useState(visible);
-  const progress = useRef(visible ? 1 : 0);
-  const transition = useRef({ from: visible ? 1 : 0, target: visible ? 1 : 0 });
-  const groupRef = useRef<Group>(null);
-  const portraitRef = useRef<MeshBasicNodeMaterial>(null);
-  const borderRef = useRef<MeshBasicMaterial>(null);
+  const present = useEntityPresent(entity);
+  const storytelling = visible && featured;
+  const auraReveal = useTransitionOpacity(storytelling, {
+    duration: storytelling ? 1.8 : 0.55,
+    delay: storytelling ? 0.3 : 0,
+    ease: easing.cubicInOut,
+  });
+  const parts = useMemo(
+    () => ({
+      portrait: null as MeshBasicNodeMaterial | null,
+      border: null as MeshBasicMaterial | null,
+      dim,
+      aura: null as Group | null,
+      auraReveal,
+    }),
+    [dim, auraReveal]
+  );
+  const bind = useTraitBinding(entity, ProfileParts, parts);
 
   const bindView = useViewBinding(entity);
   const handleInit = useCallback(
     (group: Group | null) => {
       if (!group) return;
-      groupRef.current = group;
       const anchor = entity.get(Anchor)!;
       group.position.set(anchor.x, anchor.y, anchor.z);
-      group.scale.setScalar(Math.max(0.001, progress.current));
-      const release = bindView(group);
-      return () => {
-        groupRef.current = null;
-        release?.();
-      };
+      group.scale.setScalar(Math.max(0.001, entity.get(ProfilePresence)?.value ?? 0));
+      return bindView(group);
     },
     [entity, bindView]
   );
 
-  if (visible && !present) setPresent(true);
-
-  useLayoutEffect(() => {
-    transition.current = { from: progress.current, target: visible ? 1 : 0 };
-    if (portraitRef.current) portraitRef.current.opacity = progress.current;
-    if (borderRef.current) borderRef.current.opacity = progress.current;
-  }, [visible, timing]);
-
-  useFrame(
-    () => {
-      // Auto-advance can reset the clock before React commits the next screen.
-      if (world.queryFirst(Timeline)?.get(Timeline)?.startedAt !== timing?.startedAt) return;
-      const group = groupRef.current;
-      const portrait = portraitRef.current;
-      const border = borderRef.current;
-      const { from, target } = transition.current;
-      if (!group || !portrait || !border) return;
-
-      const focus = entity.get(ProfileFocus);
-      const recede = focus?.recede ?? 0;
-      // Share the ring's staggered spring so a portrait fades and grows as it travels
-      progress.current = lerp(
-        from,
-        target,
-        focusing
-          ? profileArrival(getRevealTime(world), focus?.slot ?? -1, focus?.count ?? 0)
-          : getTransitionProgress(world)
-      );
-      group.scale.setScalar(Math.max(0.001, progress.current * (focus?.scale ?? 1)));
-      // Receding portraits also thin out, letting the wall read through them. The spring
-      // settles past its mark, which belongs in the motion rather than the fade.
-      const faded = clamp(progress.current, 0, 1) * (1 - recede * 0.45) * (focus?.wanderOpacity ?? 1);
-      group.visible = faded > 0;
-      portrait.opacity = faded;
-      border.opacity = faded;
-      // TSL uniforms carry mutable render state outside React
-      /* oxlint-disable react/immutability */
-      dim.value = recede * 0.72;
-      border.color.lerpColors(light, shadow, dim.value);
-      /* oxlint-enable react/immutability */
-
-      // Only retire a portrait once it has faded out. A portrait waiting on a screen's
-      // reveal delay also sits at zero, and retiring it there would keep it off screen.
-      if (progress.current === 0 && !visible) {
-        group.visible = false;
-        setPresent(false);
-      }
-    },
-    { priority: -0.5, enabled: present }
-  );
-
   return (
     <group ref={handleInit} name={login} visible={present}>
-      <ProfileAura active={visible && featured} radius={radius} />
+      <ProfileAura reveal={auraReveal} radius={radius} onMount={bind('aura')} />
       <mesh renderOrder={featured ? -2 : -3}>
         <circleGeometry args={[radius, 64]} />
         <meshBasicNodeMaterial
-          ref={portraitRef}
+          ref={bind('portrait')}
           colorNode={portraitColor}
           transparent
           depthTest={!featured}
@@ -160,7 +113,7 @@ function ProfileView({ entity, timeline }: { entity: Entity; timeline: Entity | 
       <mesh position={[0, 0, -0.01]} renderOrder={featured ? -2 : -3}>
         <ringGeometry args={[radius, radius + 0.025, 64]} />
         <meshBasicMaterial
-          ref={borderRef}
+          ref={bind('border')}
           color={ramp['light-25']}
           transparent
           depthTest={!featured}

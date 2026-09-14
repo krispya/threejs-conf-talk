@@ -55,26 +55,20 @@ export function ClosingRenderer() {
   const words = useRef<Group>(null);
   const invite = useRef<Group>(null);
 
-  useFrame(
-    (state) => {
-      if (!root.current || !chip.current || !words.current || !invite.current) return;
-      root.current.visible = progress.value > 0 || code.value > 0;
-      if (!root.current.visible) return;
-      // Frame a 16 by 9 layout a fixed distance in front of wherever the camera rests
-      const { x, y, z } = state.camera.position;
-      root.current.position.set(x, y, z - 6);
-      const { width, height } = state.viewport.getCurrentViewport(
-        state.camera,
-        root.current.position
-      );
-      const scale = Math.min(height / 9, width / 16);
-      root.current.scale.setScalar(scale);
-      chip.current.position.set((-width * 0.455) / scale, (height * 0.46) / scale, 0);
-      words.current.position.y = lerp(-0.4, 0, progress.value);
-      invite.current.scale.setScalar(lerp(0.96, 1, code.value));
-    },
-    { priority: -0.6 }
-  );
+  useFrame((state) => {
+    if (!root.current || !chip.current || !words.current || !invite.current) return;
+    root.current.visible = progress.value > 0 || code.value > 0;
+    if (!root.current.visible) return;
+    // Frame a 16 by 9 layout a fixed distance in front of wherever the camera rests
+    const { x, y, z } = state.camera.position;
+    root.current.position.set(x, y, z - 6);
+    const { width, height } = state.viewport.getCurrentViewport(state.camera, root.current.position);
+    const scale = Math.min(height / 9, width / 16);
+    root.current.scale.setScalar(scale);
+    chip.current.position.set((-width * 0.455) / scale, (height * 0.46) / scale, 0);
+    words.current.position.y = lerp(-0.4, 0, progress.value);
+    invite.current.scale.setScalar(lerp(0.96, 1, code.value));
+  });
 
   return (
     <group ref={root} name="closing" visible={false}>

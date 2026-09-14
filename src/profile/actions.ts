@@ -1,8 +1,8 @@
-import { IsHidden, Size, Position, Rotation } from '../traits.js';
+import { IsHidden, IsPresent, Size, Position, Rotation } from '../traits.js';
 import { TransitionOrigin } from '../timeline/traits.js';
 import { Anchor, Float } from '../floating/traits.js';
-import { createActions } from 'koota';
-import { Profile, ProfileFocus } from './traits.js';
+import { createActions, type Entity } from 'koota';
+import { Profile, ProfileFocus, ProfilePresence } from './traits.js';
 
 import { profiles } from './data.js';
 import { random } from 'math/random';
@@ -12,6 +12,7 @@ export const profileActions = createActions((world) => {
     world.spawn(
       Profile({ login, avatar, index }),
       ProfileFocus,
+      ProfilePresence,
       IsHidden,
       Size({ radius: 0.55 + (index % 4) * 0.07 }),
       Position,
@@ -26,6 +27,17 @@ export const profileActions = createActions((world) => {
         tilt: 0.06,
       })
     );
+  /** Toggle visibility and capture the fade the view animates from its current value. */
+  const show = (entity: Entity, visible: boolean, focusing = false) => {
+    if (visible) {
+      entity.remove(IsHidden);
+      if (!entity.has(IsPresent)) entity.add(IsPresent);
+    } else entity.add(IsHidden);
+    const presence = entity.get(ProfilePresence);
+    if (presence) {
+      entity.set(ProfilePresence, { from: presence.value, target: visible ? 1 : 0, focusing });
+    }
+  };
   return {
     setProfilePresentation: ({
       profilesVisible,
@@ -69,16 +81,16 @@ export const profileActions = createActions((world) => {
         // A screen that names no portraits shows everyone, otherwise only the named ones
         const everyone =
           !focusedProfile && surroundingProfiles.length === 0 && recedingProfiles.length === 0;
-        if (profilesVisible && (everyone || held)) entity.remove(IsHidden);
-        else entity.add(IsHidden);
+        show(
+          entity,
+          profilesVisible && (everyone || held),
+          Boolean(focusedProfile || surroundingProfiles.length)
+        );
       }
     },
 
     setProfilesVisible: (visible: boolean) => {
-      for (const entity of world.query(Profile)) {
-        if (visible) entity.remove(IsHidden);
-        else entity.add(IsHidden);
-      }
+      for (const entity of world.query(Profile)) show(entity, visible);
     },
     createProfile,
     createProfiles: () => {

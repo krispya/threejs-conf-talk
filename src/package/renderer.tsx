@@ -6,25 +6,22 @@ import { useFrame } from '@react-three/fiber/webgpu';
 import { useQuery, useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
-import { useLayoutEffect, useRef, type ComponentRef, useCallback, useState } from 'react';
+import { useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { type Group, type Mesh, type MeshBasicNodeMaterial, Color } from 'three/webgpu';
+import { Timeline } from '../timeline/traits.js';
+import { Package, PackageParts, PackagePresence, PackageSizing, type GlyphLabel } from './traits.js';
 import {
-  type Group,
-  type BufferGeometry,
-  type Mesh,
-  type MeshBasicNodeMaterial,
-  Color,
-} from 'three/webgpu';
-import { Timeline, ActiveScreen, Screen } from '../timeline/traits.js';
-import { Package, PackageSizing } from './traits.js';
-import { useViewBinding, useEntityVisible } from '../view/hooks.js';
+  useViewBinding,
+  useEntityVisible,
+  useEntityPresent,
+  useTraitBinding,
+} from '../view/hooks.js';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import { packageLabelSize } from './utils/sizing.js';
 import { brand, fonts, spectrum } from '../theme.js';
 import { GlassMaterial } from '../view/glass/glass-material.js';
-import type { GlassPhysicalNodeMaterial } from '../view/glass/glass-material-core.js';
 import { EXCLUDE_FROM_BACKDROP } from '../view/glass/transmission-backdrop.js';
-import { arrivalSpring } from '../view/utils/spring.js';
 import { PackageDownloads } from './downloads.js';
 import { PackageFeatures } from './features.js';
 import { PackageMaintainers } from './maintainers.js';
@@ -65,26 +62,24 @@ export function PackageRenderer() {
     timing,
   ]);
 
-  useFrame(
-    (state) => {
-      if (!group.current) return;
-      const motion = departure.current;
-      const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - motion.delay;
-      const progress = motion.duration <= 0 ? 1 : clamp(elapsed / motion.duration, 0, 1);
-      motion.value = lerp(
-        motion.from,
-        motion.target,
-        motion.target === 1 ? easing.cubicIn(progress) : easing.cubicOut(progress)
-      );
-      const { height } = state.viewport.getCurrentViewport(state.camera, [
-        0,
-        0,
-        data?.teamVisible ? -12.5 : 0,
-      ]);
-      group.current.position.y = -height * 1.5 * motion.value;
-    },
-    { priority: -0.5 }
-  );
+  // The whole group slides out of frame together, a local motion for this one object
+  useFrame((state) => {
+    if (!group.current) return;
+    const motion = departure.current;
+    const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - motion.delay;
+    const progress = motion.duration <= 0 ? 1 : clamp(elapsed / motion.duration, 0, 1);
+    motion.value = lerp(
+      motion.from,
+      motion.target,
+      motion.target === 1 ? easing.cubicIn(progress) : easing.cubicOut(progress)
+    );
+    const { height } = state.viewport.getCurrentViewport(state.camera, [
+      0,
+      0,
+      data?.teamVisible ? -12.5 : 0,
+    ]);
+    group.current.position.y = -height * 1.5 * motion.value;
+  });
 
   return (
     <group ref={group} name="packages" renderOrder={1}>
@@ -93,12 +88,7 @@ export function PackageRenderer() {
           <PackageView
             key={entity}
             entity={entity}
-            timeline={timeline}
-            showDownloads={data?.packageDownloadsVisible ?? false}
-            showRate
-            showFeatures={data?.packageFeaturesVisible ?? false}
             showMaintainers={data?.packageMaintainersVisible ?? false}
-            exitDuration={exitDuration}
           />
         ))}
       </TextGroup>
@@ -108,135 +98,45 @@ export function PackageRenderer() {
 
 useMSDF.preload(fonts.mono);
 
-function PackageView({
-  entity,
-  timeline,
-  showDownloads,
-  showRate,
-  showFeatures,
-  showMaintainers,
-  exitDuration,
-}: {
-  entity: Entity;
-  timeline: Entity | undefined;
-  showDownloads: boolean;
-  showRate: boolean;
-  showFeatures: boolean;
-  showMaintainers: boolean;
-  exitDuration: number | undefined;
-}) {
-  const world = useWorld();
-  const timing = useTrait(timeline, Timeline);
+/**
+ * The glass sphere and its label. `animatePackages` scales and fades the registered parts
+ * from the presence the presentation action captured, and releases the view once it has left.
+ */
+function PackageView({ entity, showMaintainers }: { entity: Entity; showMaintainers: boolean }) {
   const font = useMSDF(fonts.mono);
   const { name, label: displayLabel, index } = useTrait(entity, Package)!;
   const nameLabel = displayLabel || name;
   const { compressed: radius } = useTrait(entity, PackageSizing)!;
   const visible = useEntityVisible(entity);
-  const [present, setPresent] = useState(visible);
-  const progress = useRef(visible ? 1 : 0);
-  const transition = useRef({
-    from: visible ? 1 : 0,
-    target: visible ? 1 : 0,
-    startedAt: 0,
-    delay: 0,
-    duration: 0,
-    spring: false,
-    community: false,
-  });
-  const groupRef = useRef<Group>(null);
-  const meshRef = useRef<Mesh<BufferGeometry, GlassPhysicalNodeMaterial>>(null);
-  const labelRef = useRef<ComponentRef<typeof Text>>(null);
-  const labelGroup = useRef<Group>(null);
-  const chipMaterial = useRef<MeshBasicNodeMaterial>(null);
-
+  const present = useEntityPresent(entity);
   const { fontSize, width } = packageLabelSize(radius, nameLabel);
+  const parts = useMemo(
+    () => ({
+      body: null as Mesh | null,
+      label: null as GlyphLabel | null,
+      labelGroup: null as Group | null,
+      chip: null as MeshBasicNodeMaterial | null,
+    }),
+    []
+  );
+  const bind = useTraitBinding(entity, PackageParts, parts);
 
   const bindView = useViewBinding(entity);
   const handleInit = useCallback(
     (group: Group | null) => {
       if (!group) return;
-      groupRef.current = group;
-      group.scale.setScalar(Math.max(0.001, (progress.current * entity.get(Size)!.radius) / radius));
-      const release = bindView(group);
-      return () => {
-        groupRef.current = null;
-        release?.();
-      };
+      const presence = entity.get(PackagePresence)?.value ?? 0;
+      group.scale.setScalar(Math.max(0.001, (presence * entity.get(Size)!.radius) / radius));
+      return bindView(group);
     },
     [entity, radius, bindView]
-  );
-
-  if (visible && !present) setPresent(true);
-
-  useLayoutEffect(() => {
-    const screen = timeline?.targetFor(ActiveScreen)?.get(Screen);
-    const names = screen?.packageNames ?? [];
-    const count = names.length || world.query(Package).length;
-    const duration = timing?.duration ?? 0;
-    const entering = visible && progress.current === 0;
-    const returning = visible && screen?.packageEntry === 'rise';
-    const delay = entering ? (screen?.packageDelay ?? 0) : 0;
-    const stagger = entering
-      ? Math.min(screen?.packageStagger ?? 0, duration / Math.max(1, count))
-      : 0;
-    transition.current = {
-      from: returning ? 1 : progress.current,
-      target: visible ? 1 : 0,
-      startedAt: timing?.startedAt ?? world.get(Time)!.elapsed,
-      delay: delay + (names.length ? Math.max(0, names.indexOf(name)) : index) * stagger,
-      // The final package settles before the shared screen transition finishes.
-      duration: returning
-        ? 0
-        : (exitDuration ??
-          (!visible && transition.current.community
-            ? 0.3
-            : screen?.packageDuration || duration - delay - Math.max(0, count - 1) * stagger)),
-      spring: visible && (screen?.packageLayout === 'pair' || screen?.packageLayout === 'community'),
-      community: visible ? screen?.packageLayout === 'community' : transition.current.community,
-    };
-  }, [visible, timing, timeline, world, name, index, exitDuration]);
-
-  // Keep the glass active until its exit finishes, and reverse from the current progress
-  useFrame(
-    () => {
-      const group = groupRef.current;
-      const mesh = meshRef.current;
-      const label = labelRef.current;
-      const { from, target, startedAt, delay, duration, spring } = transition.current;
-      if (!group || !mesh || !label || !labelGroup.current || !chipMaterial.current) return;
-
-      const previousOpacity = clamp(progress.current, 0, 1);
-      const elapsed = world.get(Time)!.elapsed - startedAt - delay;
-      const time = duration <= 0 ? 1 : clamp(elapsed / duration, 0, 1);
-      const alpha = spring ? arrivalSpring(time) : easing.cubicOut(time);
-      progress.current = exitDuration !== undefined && time < 1 ? from : lerp(from, target, alpha);
-
-      const currentRadius = entity.get(Size)!.radius;
-      group.scale.setScalar(Math.max(0.001, (progress.current * currentRadius) / radius));
-      // Keep labels in a readable size range while the spheres grow and shrink
-      labelGroup.current.scale.setScalar(
-        (packageLabelSize(currentRadius, nameLabel).fontSize * radius) / (fontSize * currentRadius)
-      );
-      const opacity = clamp(progress.current, 0, 1);
-      mesh.material.opacity = opacity;
-      chipMaterial.current.opacity = opacity;
-      if (opacity !== previousOpacity) {
-        label.set({ style: { fontSize, lineHeight: 1, opacity } });
-      }
-
-      if (progress.current === 0 && target === 0) {
-        group.visible = false;
-        setPresent(false);
-      }
-    },
-    { priority: -0.5, enabled: present }
   );
 
   return (
     <>
       <group ref={handleInit} visible={present} name={name} renderOrder={1}>
         {/* Clear glass sphere. Drawn before the batched text so labels sit on the surface. */}
-        <mesh ref={meshRef} renderOrder={-1}>
+        <mesh ref={bind('body')} renderOrder={-1}>
           <sphereGeometry args={[radius, 64, 48]} />
           <GlassMaterial
             enabled={present}
@@ -255,7 +155,7 @@ function PackageView({
           />
         </mesh>
         <group
-          ref={labelGroup}
+          ref={bind('labelGroup')}
           name="package-label"
           renderOrder={1}
           position={[0, 0, radius + 0.04]}
@@ -264,7 +164,7 @@ function PackageView({
           <mesh renderOrder={-1}>
             <planeGeometry args={[width, fontSize * 1.5]} />
             <meshBasicNodeMaterial
-              ref={chipMaterial}
+              ref={bind('chip')}
               color={brand.purple}
               transparent
               opacity={0}
@@ -274,7 +174,7 @@ function PackageView({
             />
           </mesh>
           <Text
-            ref={labelRef}
+            ref={bind('label')}
             font={font}
             constraints={{ width: { mode: 'exact', size: width } }}
             layout={{ align: 'center', wrap: 'none' }}
@@ -284,25 +184,11 @@ function PackageView({
           >
             {nameLabel}
           </Text>
-          <PackageMaintainers
-            entity={entity}
-            visible={showMaintainers && visible}
-            width={width}
-            height={fontSize * 1.5}
-          />
+          <PackageMaintainers entity={entity} visible={showMaintainers && visible} />
         </group>
       </group>
-      <PackageDownloads
-        entity={entity}
-        timeline={timeline}
-        radius={radius}
-        visible={showDownloads && visible}
-        showRate={showRate}
-        exitDuration={exitDuration}
-      />
-      {name === 'three' && (
-        <PackageFeatures entity={entity} timeline={timeline} visible={showFeatures && visible} />
-      )}
+      <PackageDownloads entity={entity} />
+      {name === 'three' && <PackageFeatures entity={entity} />}
     </>
   );
 }

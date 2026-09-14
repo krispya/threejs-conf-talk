@@ -1,4 +1,3 @@
-import { useFrame } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { useActions, useQueryFirst, useTrait } from 'koota/react';
 import { easing } from 'math/time';
@@ -7,8 +6,12 @@ import { uniform } from 'three/tsl';
 import { Timeline } from '../timeline/traits.js';
 import { transitionActions, type TransitionOptions } from '../transition/actions.js';
 import { Transition } from '../transition/traits.js';
+import { viewActions } from './actions.js';
 
-/** Configure a world transition on discrete changes and project its value into a shader uniform. */
+/**
+ * Configure a world transition on discrete changes and hand its uniform to the world.
+ * `syncTransitionUniforms` copies the advanced value into the uniform every frame.
+ */
 export function useTransitionOpacity(
   visible: boolean,
   {
@@ -25,6 +28,7 @@ export function useTransitionOpacity(
   const timeline = useQueryFirst(Timeline);
   const timing = useTrait(timeline, Timeline);
   const { createTransition, setTransition, destroyTransition } = useActions(transitionActions);
+  const { attachUniform } = useActions(viewActions);
   const transition = useRef<Entity | undefined>(undefined);
   const opacity = useMemo(() => uniform(0), []);
 
@@ -41,6 +45,7 @@ export function useTransitionOpacity(
       ready,
       restartKey,
     }));
+    attachUniform(entity, opacity);
     setTransition(entity, Number(visible), {
       restartOnChange,
       restartKey,
@@ -57,6 +62,7 @@ export function useTransitionOpacity(
   }, [
     createTransition,
     setTransition,
+    attachUniform,
     visible,
     timing,
     restartOnChange,
@@ -69,17 +75,6 @@ export function useTransitionOpacity(
     clock,
     opacity,
   ]);
-
-  useFrame(
-    () => {
-      const entity = transition.current;
-      if (!entity?.isAlive()) return;
-      // TSL uniforms carry mutable render state outside React.
-      // oxlint-disable-next-line react/immutability
-      opacity.value = entity.get(Transition)!.value;
-    },
-    { priority: -0.5 }
-  );
 
   return opacity;
 }

@@ -1,13 +1,200 @@
-import { Size, IsHidden } from '../traits.js';
-import { SizeTransition, Package } from './traits.js';
+import { Size, IsHidden, IsPresent } from '../traits.js';
+import { Time } from '../time/traits.js';
+import { Ref } from '../view/traits.js';
+import {
+  DownloadCounter,
+  DownloadParts,
+  FeatureChips,
+  FeatureParts,
+  MaintainerParts,
+  Package,
+  PackageParts,
+  PackagePresence,
+  PackageSizing,
+  SizeTransition,
+} from './traits.js';
 import { Anchor, Float } from '../floating/traits.js';
 import { Bounds, Camera } from '../camera/traits.js';
-import { type World, Not } from 'koota';
-import { lerp } from 'math';
+import { type Entity, type World, Not } from 'koota';
+import { clamp, lerp } from 'math';
+import { easing } from 'math/time';
+import type { Material } from 'three/webgpu';
 import { getTransitionProgress } from '../timeline/timing.js';
 import { ActiveScreen, Timeline, Screen, ScreenTransition } from '../timeline/traits.js';
 import { random } from 'math/random';
-import { packageLabelSize } from './utils/sizing.js';
+import { arrivalSpring } from '../view/utils/spring.js';
+import { placeMaintainerPortrait } from './utils/maintainer-layout.js';
+import { downloadsLabel, packageLabelSize } from './utils/sizing.js';
+
+/**
+ * Advance each sphere's presence and apply it to the mounted glass, label, and chip.
+ * A sphere that has finished leaving releases its view.
+ */
+export function animatePackages(world: World) {
+  const now = world.get(Time)!.elapsed;
+  const retired: Entity[] = [];
+  world
+    .query(Package, PackagePresence, PackageSizing, Size)
+    .updateEach(([pkg, presence, sizing, size], entity) => {
+      const previous = clamp(presence.value, 0, 1);
+      const elapsed = now - presence.startedAt - presence.delay;
+      const time = presence.duration <= 0 ? 1 : clamp(elapsed / presence.duration, 0, 1);
+      const alpha = presence.spring ? arrivalSpring(time) : easing.cubicOut(time);
+      // Spheres keep their size while the whole group leaves downward, then settle
+      presence.value =
+        presence.exit >= 0 && time < 1 ? presence.from : lerp(presence.from, presence.target, alpha);
+      if (!entity.has(IsPresent)) return;
+
+      const group = entity.get(Ref);
+      const parts = entity.get(PackageParts);
+      if (group && parts?.body && parts.label && parts.labelGroup && parts.chip) {
+        const radius = sizing.compressed;
+        const label = pkg.label || pkg.name;
+        const { fontSize } = packageLabelSize(radius, label);
+        group.scale.setScalar(Math.max(0.001, (presence.value * size.radius) / radius));
+        // Keep labels in a readable size range while the spheres grow and shrink
+        parts.labelGroup.scale.setScalar(
+          (packageLabelSize(size.radius, label).fontSize * radius) / (fontSize * size.radius)
+        );
+        const opacity = clamp(presence.value, 0, 1);
+        (parts.body.material as Material).opacity = opacity;
+        parts.chip.opacity = opacity;
+        if (opacity !== previous) parts.label.set({ style: { fontSize, lineHeight: 1, opacity } });
+      }
+      if (presence.value === 0 && presence.target === 0) {
+        if (group) group.visible = false;
+        retired.push(entity);
+      }
+    });
+  for (const entity of retired) entity.remove(IsPresent);
+}
+
+/** Raise, count, and settle each download ticker above its sphere. */
+export function animateDownloadCounters(world: World) {
+  const now = world.get(Time)!.elapsed;
+  world
+    .query(Package, DownloadCounter, DownloadParts, PackagePresence, PackageSizing, Ref)
+    .updateEach(([pkg, counter, parts, presence, sizing, body]) => {
+      const { group, number, backdrop } = parts;
+      if (!group || !number || !backdrop) return;
+      if (counter.fresh) {
+        number.set({ text: downloadsLabel(0) });
+        group.visible = false;
+        counter.fresh = false;
+      }
+      if (!counter.visible && counter.opacity === 0) return;
+
+      const elapsed = now - counter.startedAt;
+      const duration = counter.visible
+        ? 0.6
+        : Math.min(presence.exit >= 0 ? presence.exit : 0.34, 0.45);
+      const progress = duration <= 0 ? 1 : clamp(elapsed / duration, 0, 1);
+      if (counter.visible) {
+        const settle = Math.sin(progress * Math.PI) ** 2;
+        counter.y = lerp(counter.fromY, 0, easing.cubicOut(progress)) + settle * 0.08;
+        counter.scale = lerp(counter.fromScale, 1, easing.cubicOut(progress)) + settle * 0.018;
+        const size = sizing.compressed * body.scale.x;
+        const rejoin = counter.rejoining ? easing.cubicOut(progress) : 1;
+        counter.anchorX = lerp(counter.fromAnchorX, body.position.x, rejoin);
+        counter.anchorY = lerp(counter.fromAnchorY, body.position.y + size + 0.25, rejoin);
+        counter.anchorZ = lerp(counter.fromAnchorZ, body.position.z + size + 0.04, rejoin);
+      } else {
+        counter.y = counter.fromY + easing.cubicIn(progress) * (presence.exit < 0 ? 0.65 : -0.5);
+        counter.scale = lerp(counter.fromScale, 0.82, easing.cubicIn(progress));
+      }
+      const opacity = counter.visible
+        ? lerp(counter.fromOpacity, 1, easing.cubicOut(clamp(elapsed / 0.22, 0, 1)))
+        : lerp(counter.fromOpacity, 0, easing.cubicIn(progress));
+      group.visible = opacity > 0;
+      if (opacity !== counter.opacity) {
+        number.set({ style: { ...number.style, opacity } });
+        backdrop.opacity = opacity;
+        counter.opacity = opacity;
+      }
+      if (!group.visible) return;
+
+      // Keep the ticker anchored while its exit follows the package group.
+      group.scale.setScalar(counter.scale);
+      group.position.set(counter.anchorX, counter.anchorY + counter.y, counter.anchorZ);
+
+      // Update the retained glyphs at 30 Hz while the counter runs, then leave them alone.
+      const countElapsed = Math.max(0, now - counter.countStartedAt);
+      const tick = Math.floor(countElapsed * 30);
+      if (counter.visible && tick !== counter.tick && counter.value !== pkg.downloads) {
+        const value = Math.round(
+          lerp(
+            counter.countFrom,
+            pkg.downloads,
+            counter.countDuration > 0
+              ? easing.cubicOut(clamp(countElapsed / counter.countDuration, 0, 1))
+              : 1 - Math.exp(-countElapsed / 1.2)
+          )
+        );
+        if (value !== counter.value) number.set({ text: downloadsLabel(value) });
+        counter.tick = tick;
+        counter.value = value;
+      }
+    });
+}
+
+/** Feature chips follow the three sphere's float and stagger in after it settles. */
+export function animateFeatureChips(world: World) {
+  const now = world.get(Time)!.elapsed;
+  const startedAt = world.queryFirst(Timeline)?.get(Timeline)?.startedAt ?? 0;
+  world
+    .query(FeatureChips, FeatureParts, PackageSizing, Ref)
+    .updateEach(([chips, parts, sizing, body]) => {
+      if (!parts.root) return;
+      const size = sizing.compressed * body.scale.x;
+      parts.root.position.set(body.position.x + size + 0.4, body.position.y, body.position.z + 0.08);
+      chips.items.forEach((item, index) => {
+        const chip = parts.chips[index];
+        const label = parts.labels[index];
+        const material = parts.materials[index];
+        if (!chip || !label || !material) return;
+        const elapsed = now - startedAt - item.delay;
+        const progress = clamp(elapsed / (chips.visible ? 0.6 : 0.24), 0, 1);
+        item.value = lerp(
+          item.from,
+          item.target,
+          chips.visible ? arrivalSpring(progress) : easing.cubicIn(progress)
+        );
+        const opacity = clamp(item.value, 0, 1);
+        chip.visible = opacity > 0;
+        if (material.opacity !== opacity) {
+          material.opacity = opacity;
+          label.set({ style: { ...label.style, opacity } });
+        }
+        chip.scale.setScalar(lerp(0.9, 1, item.value));
+        chip.position.set(
+          (1 - item.value) * -0.3,
+          (0.5 - index) * 0.72 + Math.sin(now * 0.4 + index) * 0.035,
+          0
+        );
+      });
+    });
+}
+
+const placement = new Float32Array(4);
+
+/** Maintainer portraits drift along their label's edges while their fade reveals them. */
+export function placeMaintainerPortraits(world: World) {
+  const now = world.get(Time)!.elapsed;
+  world.query(Package, PackageSizing, MaintainerParts).updateEach(([pkg, sizing, parts]) => {
+    const reveal = parts.opacity.value;
+    const { width, fontSize } = packageLabelSize(sizing.compressed, pkg.label || pkg.name);
+    const count = parts.groups.length;
+    parts.groups.forEach((portrait, index) => {
+      if (!portrait) return;
+      portrait.visible = reveal > 0;
+      if (!portrait.visible) return;
+      placeMaintainerPortrait(placement, width, fontSize * 1.5, 0.22, pkg.index, index, count, now);
+      portrait.visible = placement[3] > 0;
+      portrait.position.set(placement[0], placement[1], placement[2]);
+      portrait.scale.setScalar(placement[3] * (0.85 + reveal * 0.15));
+    });
+  });
+}
 
 /** Resize the same package entities using the destination screen's transition timing. */
 export function resizePackages(world: World) {

@@ -6,6 +6,7 @@ import { useMemo, useRef } from 'react';
 import { color, normalView, smoothstep } from 'three/tsl';
 import { SRGBColorSpace, type Group } from 'three/webgpu';
 import { PreviousScreen, Screen } from '../timeline/traits.js';
+import type { FrameStep } from '../view/hooks.js';
 import { useTransitionOpacity } from '../view/use-transition-opacity.js';
 import { DocumentCollapse } from './document-collapse.js';
 
@@ -33,30 +34,38 @@ export function AnnouncementRenderer() {
   const gold = useMemo(() => color('#d7bb81').mul(normalView.z.abs().mul(0.32).add(0.68)), []);
   const root = useRef<Group>(null);
   const sheet = useRef<Group>(null);
+  // The collapse captures the placed sheet, so it steps after the frame is positioned
+  const steps = useMemo(() => new Set<FrameStep>(), []);
 
-  useFrame(
-    (state) => {
-      if (!root.current || !sheet.current) return;
+  useFrame((state, delta) => {
+    if (root.current && sheet.current) {
       root.current.visible = progress.value > 0;
       sheet.current.visible = !collapsing;
-      if (!root.current.visible || collapsing) return;
-      const viewport = state.viewport.getCurrentViewport(state.camera, root.current.position);
-      root.current.scale.setScalar(
-        Math.min((viewport.width * 0.78) / 27.2, (viewport.height * 0.84) / (height + 3.2))
-      );
-      sheet.current.position.y = lerp(-height - 12, 0, progress.value);
-      sheet.current.rotation.set(
-        lerp(0.12, 0, progress.value),
-        lerp(-0.1, 0, progress.value),
-        lerp(-0.09, -0.012, progress.value)
-      );
-    },
-    { priority: -0.6 }
-  );
+      if (root.current.visible && !collapsing) {
+        const viewport = state.viewport.getCurrentViewport(state.camera, root.current.position);
+        root.current.scale.setScalar(
+          Math.min((viewport.width * 0.78) / 27.2, (viewport.height * 0.84) / (height + 3.2))
+        );
+        sheet.current.position.y = lerp(-height - 12, 0, progress.value);
+        sheet.current.rotation.set(
+          lerp(0.12, 0, progress.value),
+          lerp(-0.1, 0, progress.value),
+          lerp(-0.09, -0.012, progress.value)
+        );
+      }
+    }
+    for (const step of steps) step(state, delta);
+  });
 
   return (
     <group ref={root} name="framed-announcement" position={[0, 0, -11]} visible={false}>
-      <DocumentCollapse sheet={sheet} progress={progress} width={27.6} height={height + 3.6} />
+      <DocumentCollapse
+        sheet={sheet}
+        progress={progress}
+        width={27.6}
+        height={height + 3.6}
+        steps={steps}
+      />
       <group ref={sheet} name="announcement-frame">
         <mesh position={[0.3, -0.35, -0.35]} renderOrder={3}>
           <boxGeometry args={[26.8, height + 2.8, 0.18]} />

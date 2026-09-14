@@ -84,22 +84,19 @@ export function PrinciplesRenderer({
     if (root.current) void warmUp(renderer, root.current, camera, scene);
   }, [renderer, camera, scene, curtain, font, mono]);
 
-  useFrame(
-    (state) => {
-      if (!root.current || !lettering.current || !list.current) return;
-      root.current.visible = panel.value > 0 || (hold && covered.value < 1);
-      if (!root.current.visible) return;
-      const { x, y, z } = camera.position;
-      target.set(x, y, z - 6);
-      const { width, height } = state.viewport.getCurrentViewport(camera, target);
-      const scale = Math.min(height / 10, width / 11.5);
-      lettering.current.position.set(x - width * 0.465, y, z - 6);
-      lettering.current.scale.setScalar(scale);
-      list.current.position.y = lift.value * 0.45;
-      center.value.set((width * 0.465) / scale, 0, 0);
-    },
-    { priority: -0.6 }
-  );
+  useFrame((state) => {
+    if (!root.current || !lettering.current || !list.current) return;
+    root.current.visible = panel.value > 0 || (hold && covered.value < 1);
+    if (!root.current.visible) return;
+    const { x, y, z } = camera.position;
+    target.set(x, y, z - 6);
+    const { width, height } = state.viewport.getCurrentViewport(camera, target);
+    const scale = Math.min(height / 10, width / 11.5);
+    lettering.current.position.set(x - width * 0.465, y, z - 6);
+    lettering.current.scale.setScalar(scale);
+    list.current.position.y = lift.value * 0.45;
+    center.value.set((width * 0.465) / scale, 0, 0);
+  });
 
   return (
     <group ref={root} name="principles" visible={false}>

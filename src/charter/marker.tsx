@@ -65,12 +65,9 @@ export function CharterMarker({ opacity }: { opacity: Node<'float'> }) {
     return tip.mul(edge).mul(fibers).mul(opacity).mul(0.86);
   }, [progress, opacity]);
 
-  useFrame(
-    () => {
-      if (group.current) group.current.visible = progress.value > 0;
-    },
-    { priority: -0.6 }
-  );
+  useFrame(() => {
+    if (group.current) group.current.visible = progress.value > 0;
+  });
 
   return (
     <group ref={group} name="charter-initiatives-marker" position={[-14, 4.1, 0.16]} visible={false}>
