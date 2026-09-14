@@ -1,12 +1,12 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
 import { Time } from '../../time/traits.js';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import { extend, useFrame, useLoader } from '@react-three/fiber/webgpu';
+import { extend, useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
 import { useLayoutEffect, useRef, useMemo } from 'react';
-import { TextureLoader, type Group, Shape, SRGBColorSpace } from 'three/webgpu';
+import { type Group, Shape, SRGBColorSpace } from 'three/webgpu';
 import { codeExamples } from './data.js';
 import { Timeline } from '../../timeline/traits.js';
 import { fonts, ramp } from '../../theme.js';
@@ -16,7 +16,7 @@ import { Text, TextGroup } from '@pmndrs/glyph/react';
 const MeltMaterial = extend(MeltMaterialImpl);
 
 useMSDF.preload(fonts.mono);
-for (const example of codeExamples) useLoader.preload(TextureLoader, `./code/${example.id}.png`);
+for (const example of codeExamples) useTexture.preload(`./code/${example.id}.png`);
 
 export function CodeComparisonRenderer() {
   const world = useWorld();
@@ -185,7 +185,7 @@ function CodeArrow() {
 
 function CodePanel({ example }: { example: (typeof codeExamples)[number] }) {
   const font = useMSDF(fonts.mono);
-  const texture = useLoader(TextureLoader, `./code/${example.id}.png`);
+  const texture = useTexture(`./code/${example.id}.png`);
   const chipWidth = example.label.length * 0.32 * 0.62 + 0.24;
   const shape = useMemo(() => {
     const shape = new Shape();

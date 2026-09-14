@@ -22,7 +22,6 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   SRGBColorSpace,
-  TextureLoader,
 } from 'three/webgpu';
 import { ActiveScreen, Screen, ScreenTransition, Timeline } from '../timeline/traits.js';
 import { Camera } from '../camera/traits.js';
@@ -44,14 +43,14 @@ import { InitiativeFeatureChip } from './feature-chip.js';
 import { createInitiativeGlade, disposeInitiativeGlade } from './utils/glade.js';
 
 useLoader.preload(GLTFLoader, './meshes/magic_portal/scene.glb', withMeshopt);
-useLoader.preload(TextureLoader, './sky/hyg-stars.png');
+useTexture.preload('./sky/hyg-stars.png');
 
 /** A warp into a glade where an ancient stone portal will preview each initiative. */
 export function InitiativeRenderer() {
   // Baked by scripts/bake-portal.mjs with the opening centered at the origin, facing +z,
   // one unit in radius, so the preview camera pushes straight in along z
   const gltf = useLoader(GLTFLoader, './meshes/magic_portal/scene.glb', withMeshopt);
-  const stars = useLoader(TextureLoader, './sky/hyg-stars.png');
+  const stars = useTexture('./sky/hyg-stars.png');
   const world = useWorld();
   const { data } = useActiveScreen();
   const falling = !!data?.initiativePortalVisible;
