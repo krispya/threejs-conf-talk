@@ -35,7 +35,7 @@ import {
 type N = any;
 const fn: N = Fn;
 
-const hash21 = fn(([point]: N[]) => {
+export const hash21 = fn(([point]: N[]) => {
   const p = point.mul(vec2(123.34, 456.21)).fract().toVar();
   p.addAssign(dot(p, p.add(45.32)));
   return p.x.mul(p.y).fract();
@@ -84,7 +84,7 @@ const fbm = layeredNoise(3);
 const detail = layeredNoise(4);
 
 /** The reference's cyclic brand palette, authored in display color space. */
-const spectrum = fn(([phase]: N[]) => {
+export const spectrum = fn(([phase]: N[]) => {
   const hue = phase.fract().mul(7);
   const value = vec3(0.847, 0.333, 0.976).toVar();
   value.assign(mix(value, vec3(1, 0.286, 0.502), hue.clamp()));
