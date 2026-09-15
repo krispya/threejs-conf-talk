@@ -30,6 +30,69 @@ body,
   height: 100%;
 }
 
+#startup-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: #caf543;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.4s ease,
+    visibility 0s 0.4s;
+}
+
+#startup-loading svg {
+  width: 48px;
+  overflow: visible;
+  fill: #000000;
+  animation: loading-shake 3.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+#startup-loading[data-ready='true'] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#startup-loading[data-ready='true'] svg {
+  animation-play-state: paused;
+  will-change: auto;
+}
+
+@keyframes loading-shake {
+  0%,
+  78%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  82% {
+    transform: translateX(-2px) rotate(-3deg);
+  }
+  86% {
+    transform: translateX(2px) rotate(3deg);
+  }
+  90% {
+    transform: translateX(-1px) rotate(-2deg);
+  }
+  94% {
+    transform: translateX(1px) rotate(1deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #startup-loading svg {
+    animation: none;
+  }
+
+  #startup-loading {
+    transition-duration: 0.01s;
+  }
+}
+
 .brand-mark {
   position: fixed;
   left: 4.5%;

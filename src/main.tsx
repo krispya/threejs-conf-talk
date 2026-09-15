@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app.js';
 import { WorldProvider } from 'koota/react';
 import { world } from './world.js';
-import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

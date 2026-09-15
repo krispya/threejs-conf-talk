@@ -1,6 +1,6 @@
 import { Canvas, useThree } from '@react-three/fiber/webgpu';
 import { useActions } from 'koota/react';
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { actions } from './actions.js';
 import { screens } from './timeline/screens.js';
 import { Background } from './background/renderer.js';
@@ -11,8 +11,17 @@ import { Prewarm } from './view/prewarm.js';
 import { Renderers } from './renderers.js';
 import { TransmissionBackdropProvider } from './glass/transmission-backdrop-provider.js';
 import { TimelineControls } from './timeline/controls.js';
+import { OpeningReady } from './title/loading.js';
 
 export function App() {
+  const [ready, setReady] = useState(false);
+  const reveal = () => {
+    const loading = document.getElementById('startup-loading');
+    loading?.setAttribute('data-ready', 'true');
+    loading?.setAttribute('aria-hidden', 'true');
+    setReady(true);
+  };
+
   return (
     <>
       <Canvas shadows>
@@ -27,7 +36,8 @@ export function App() {
           <Prewarm />
           <ResolutionCap width={1920} />
           <Startup />
-          <TimelineControls />
+          {!ready && <OpeningReady onReady={reveal} />}
+          {ready && <TimelineControls />}
         </TransmissionBackdropProvider>
       </Canvas>
       <BrandMark />
