@@ -56,8 +56,8 @@ useTexture.preload('./sky/hyg-stars.png');
 
 /** A warp into a glade where an ancient stone portal will preview each initiative. */
 export function InitiativeRenderer() {
-  // Baked by scripts/bake-portal.mjs with the opening centered at the origin, facing +z,
-  // one unit in radius, so the preview camera pushes straight in along z
+  // The opening is centered at the origin, facing +z with a one unit radius,
+  // so the preview camera pushes straight in along z
   const gltf = useLoader(GLTFLoader, './meshes/magic_portal/scene.glb', withMeshopt);
   const stars = useTexture('./sky/hyg-stars.png');
   const [owned] = useResource(

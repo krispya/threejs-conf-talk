@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const media =
-  process.env.GAMES_MEDIA ?? fileURLToPath(new URL('../reference/games', import.meta.url));
+  process.env.GAMES_MEDIA ?? fileURLToPath(new URL('../public/initiatives/games', import.meta.url));
 const output = fileURLToPath(new URL('../public/initiatives/games.mp4', import.meta.url));
 // Crop recording borders and browser controls before fitting the portal's center square
 const shots = [

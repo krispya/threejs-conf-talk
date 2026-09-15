@@ -55,7 +55,7 @@ export const spectrum = fn(([phase]: N[]) => {
   return value;
 }).setLayout({ name: 'starSpectrum', type: 'vec3', inputs: [{ name: 'phase', type: 'float' }] });
 
-/** Dark mineral mode from reference/glitter-pearl/glitter-pearl-shadertoy.glsl. */
+/** Dark mineral sky with animated glints and gentle camera parallax. */
 export const starfieldNode = (nebula: Texture, viewUV: Node<'vec2'> = screenUV) =>
   Fn(() => {
     const t: N = time;
