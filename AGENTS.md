@@ -46,6 +46,7 @@ Comments should be concise and relavant to explaining the algorithm or feature. 
 
 ## Domain Boundaries
 
+- Reserve `src/` root for application composition and shared code. Keep domain components in their owning directories.
 - Each domain owns its state and mutations. Use its actions for state transitions and cross-domain changes. Systems advance continuous state each frame.
 - Renderers map entities to views. Views own mounted objects, visual resources, and local animation. Keep domain logic independent of React and mounted views.
 - Use React for structure, discrete changes, and resource readiness. Read current world data during frame updates and mutate objects or uniforms directly. Keep continuous animation out of React state and subscriptions.

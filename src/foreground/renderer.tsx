@@ -1,6 +1,6 @@
-import { useResource } from './view/hooks.js';
+import { useResource } from '../view/hooks.js';
 import type { Entity } from 'koota';
-import { useActiveScreen } from './timeline/hooks.js';
+import { useActiveScreen } from '../timeline/hooks.js';
 import { createPortal, useFrame, useThree, type ThreeCamera } from '@react-three/fiber/webgpu';
 import { useTrait } from 'koota/react';
 import { easing } from 'math/time';
@@ -8,15 +8,15 @@ import { Suspense, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { color, mix, pass, screenUV, uniform, vec4 } from 'three/tsl';
 import { NodeUpdateType, RenderPipeline, Scene, type Group, type WebGPURenderer } from 'three/webgpu';
-import { ScreenTransition } from './timeline/traits.js';
-import { ramp } from './theme.js';
-import { CharterRenderer } from './charter/renderer.js';
-import { AnnouncementRenderer } from './charter/announcement.js';
-import { GreetingRenderer } from './introduction/greeting.js';
-import { HistoryRenderer } from './introduction/history.js';
-import { PrinciplesRenderer } from './charter/principles/renderer.js';
-import { useTransitionOpacity } from './transition/use-transition-opacity.js';
-import { warmUp } from './view/utils/warm-up.js';
+import { ScreenTransition } from '../timeline/traits.js';
+import { ramp } from '../theme.js';
+import { CharterRenderer } from '../charter/renderer.js';
+import { AnnouncementRenderer } from '../charter/announcement.js';
+import { GreetingRenderer } from '../introduction/greeting.js';
+import { HistoryRenderer } from '../introduction/history.js';
+import { PrinciplesRenderer } from '../charter/principles/renderer.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
+import { warmUp } from '../view/utils/warm-up.js';
 
 /** Composite foreground screens over the scene, with a soft focus for the greeting. */
 export function Foreground() {

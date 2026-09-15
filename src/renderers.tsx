@@ -8,7 +8,7 @@ import { PackageRenderer } from './package/renderer.js';
 import { ProfileRenderer } from './profile/renderer.js';
 import { RobotReveal } from './robot/renderer.js';
 import { TeamConnections } from './profile/team-connections.js';
-import { Foreground } from './foreground.js';
+import { Foreground } from './foreground/renderer.js';
 import { TitleRenderer } from './title/renderer.js';
 
 export function Renderers() {
