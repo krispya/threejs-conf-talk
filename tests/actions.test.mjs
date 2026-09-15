@@ -120,3 +120,33 @@ void test('view cleanup preserves a replacement object and tolerates a destroyed
   entity.destroy();
   assert.doesNotThrow(() => detachView(entity, original));
 });
+
+void test('package and profile exits finish without mounted views and survive navigation back', (t) => {
+  const world = createWorld(sim.Time, sim.Bounds);
+  t.after(() => world.destroy());
+  const commands = sim.actions(world);
+  const timeline = commands.createTimeline(sim.screens);
+  commands.startTimeline(timeline);
+  commands.goTo('packages');
+  sim.systems.updateTime(world, 1, 100);
+  sim.systems.animatePackages(world);
+  assert(world.query(sim.Package, sim.IsPresent).length > 0);
+
+  commands.goTo('profiles');
+  for (const profile of world.query(sim.Profile)) commands.finishProfileExit(profile);
+  assert(world.query(sim.Profile, sim.IsPresent).length > 0);
+  sim.systems.updateTime(world, 1, 200);
+  sim.systems.animatePackages(world);
+  sim.systems.animateProfiles(world);
+  assert.equal(world.query(sim.Package, sim.IsPresent).length, 0);
+  assert(world.query(sim.Profile, sim.IsPresent).length > 0);
+
+  commands.goTo('title');
+  commands.goTo('profiles');
+  for (const profile of world.query(sim.Profile)) commands.finishProfileExit(profile);
+  assert(world.query(sim.Profile, sim.IsPresent).length > 0);
+  commands.goTo('title');
+  sim.systems.updateTime(world, 1, 300);
+  sim.systems.animateProfiles(world);
+  assert.equal(world.query(sim.Profile, sim.IsPresent).length, 0);
+});

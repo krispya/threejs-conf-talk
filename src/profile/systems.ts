@@ -1,3 +1,4 @@
+import { profileActions } from './actions.js';
 import { type ProfileLayout, teamLayout } from './utils/layout.js';
 import { Bounds, Camera } from '../camera/traits.js';
 import { IsHidden, IsPresent, Position, Rotation, Size } from '../traits.js';
@@ -62,7 +63,7 @@ export function animateProfiles(world: World) {
       retired.push(entity);
     }
   });
-  for (const entity of retired) entity.remove(IsPresent);
+  for (const entity of retired) profileActions(world).finishProfileExit(entity);
 }
 
 const point = new Vector3();

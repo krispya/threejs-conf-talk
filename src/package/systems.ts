@@ -1,3 +1,4 @@
+import { packageActions } from './actions.js';
 import { Size, IsHidden, IsPresent } from '../traits.js';
 import { Time } from '../time/traits.js';
 import { Ref } from '../view/traits.js';
@@ -66,7 +67,7 @@ export function animatePackages(world: World) {
         retired.push(entity);
       }
     });
-  for (const entity of retired) entity.remove(IsPresent);
+  for (const entity of retired) packageActions(world).finishPackageExit(entity);
 }
 
 /** Raise, count, and settle each download ticker above its sphere. */

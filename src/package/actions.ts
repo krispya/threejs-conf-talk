@@ -51,6 +51,11 @@ export const packageActions = createActions((world) => {
     } else entity.add(IsHidden);
   };
   return {
+    finishPackageExit: (entity: Entity) => {
+      if (!entity.isAlive()) return;
+      const presence = entity.get(PackagePresence);
+      if (presence?.target === 0 && presence.value === 0) entity.remove(IsPresent);
+    },
     /** Capture every package transition for the screen being entered. */
     setPackagePresentation: (screen: TraitRecord<ExtractSchema<typeof Screen>>) => {
       const timing = world.queryFirst(Timeline)?.get(Timeline);

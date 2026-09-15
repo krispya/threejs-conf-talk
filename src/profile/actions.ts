@@ -39,6 +39,11 @@ export const profileActions = createActions((world) => {
     }
   };
   return {
+    finishProfileExit: (entity: Entity) => {
+      if (!entity.isAlive()) return;
+      const presence = entity.get(ProfilePresence);
+      if (presence?.target === 0 && presence.value === 0) entity.remove(IsPresent);
+    },
     setProfilePresentation: ({
       profilesVisible,
       focusedProfile,
