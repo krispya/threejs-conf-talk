@@ -1,7 +1,7 @@
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Position } from '../traits.js';
 import { TextGroup, Text } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { Text as GlyphText } from '@pmndrs/glyph/three';
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useQuery, useTrait } from 'koota/react';
@@ -16,7 +16,7 @@ import { warmUp } from '../view/utils/warm-up.js';
 import { useViewBinding } from '../view/hooks.js';
 import type { Entity } from 'koota';
 
-useMSDF.preload(fonts.sans);
+void useMsdf.preload(fonts.sans);
 
 export function LetterRenderer() {
   const letters = useQuery(Letter, Position);
@@ -137,7 +137,7 @@ function LetterView({
   entity: Entity;
   material: ReturnType<typeof createGradientTextMaterial>;
 }) {
-  const font = useMSDF(fonts.sans);
+  const font = useMsdf(fonts.sans);
   const { char } = useTrait(entity, Letter)!;
 
   const handleInit = useViewBinding(entity);

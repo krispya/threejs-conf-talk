@@ -2,7 +2,7 @@ import { useResource } from '../view/hooks.js';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useLoader, useTexture, type ThreeCamera } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';
@@ -18,8 +18,8 @@ import { arrivalSpring } from '../transition/utils/spring.js';
 import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 
 useLoader.preload(GLTFLoader, './meshes/pmndrs.glb');
-useMSDF.preload(fonts.sans);
-useMSDF.preload(fonts.mono);
+void useMsdf.preload(fonts.sans);
+void useMsdf.preload(fonts.mono);
 
 export function GreetingRenderer({
   camera,
@@ -29,8 +29,8 @@ export function GreetingRenderer({
   onReady: (group: Group) => void;
 }) {
   const gltf = useLoader(GLTFLoader, './meshes/pmndrs.glb');
-  const sans = useMSDF(fonts.sans);
-  const mono = useMSDF(fonts.mono);
+  const sans = useMsdf(fonts.sans);
+  const mono = useMsdf(fonts.mono);
   const world = useWorld();
   const { timeline, data } = useActiveScreen();
   const timing = useTrait(timeline, Timeline);

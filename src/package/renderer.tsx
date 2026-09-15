@@ -16,7 +16,7 @@ import {
   useEntityPresent,
   useTraitBinding,
 } from '../view/hooks.js';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import { packageLabelSize } from './utils/sizing.js';
 import { brand, fonts, spectrum } from '../theme.js';
@@ -82,8 +82,8 @@ export function PackageRenderer() {
   });
 
   return (
-    <group ref={group} name="packages" renderOrder={1}>
-      <TextGroup>
+    <group ref={group} name="packages">
+      <TextGroup renderOrder={1}>
         {packages.map((entity) => (
           <PackageView
             key={entity}
@@ -96,14 +96,14 @@ export function PackageRenderer() {
   );
 }
 
-useMSDF.preload(fonts.mono);
+void useMsdf.preload(fonts.mono);
 
 /**
  * The glass sphere and its label. `animatePackages` scales and fades the registered parts
  * from the presence the presentation action captured, and releases the view once it has left.
  */
 function PackageView({ entity, showMaintainers }: { entity: Entity; showMaintainers: boolean }) {
-  const font = useMSDF(fonts.mono);
+  const font = useMsdf(fonts.mono);
   const { name, label: displayLabel, index } = useTrait(entity, Package)!;
   const nameLabel = displayLabel || name;
   const { compressed: radius } = useTrait(entity, PackageSizing)!;
@@ -128,7 +128,7 @@ function PackageView({ entity, showMaintainers }: { entity: Entity; showMaintain
 
   return (
     <>
-      <group ref={handleInit} visible={present} name={name} renderOrder={1}>
+      <group ref={handleInit} visible={present} name={name}>
         {/* Clear glass sphere. Drawn before the batched text so labels sit on the surface. */}
         <mesh ref={bind('body')} renderOrder={-1}>
           <sphereGeometry args={[radius, 64, 48]} />
@@ -150,7 +150,6 @@ function PackageView({ entity, showMaintainers }: { entity: Entity; showMaintain
         <group
           ref={bind('labelGroup')}
           name="package-label"
-          renderOrder={1}
           position={[0, 0, radius + 0.04]}
           userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
         >

@@ -5,7 +5,7 @@ import { useActiveScreen } from '../timeline/hooks.js';
 import { useViewBinding, useEntityVisible } from '../view/hooks.js';
 import { Ref } from '../view/traits.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
@@ -25,12 +25,12 @@ export function CharterRenderer() {
   return documents.map((entity) => <CharterView key={entity} entity={entity} />);
 }
 
-useMSDF.preload(fonts.sans);
-useMSDF.preload(fonts.mono);
+void useMsdf.preload(fonts.sans);
+void useMsdf.preload(fonts.mono);
 
 function CharterView({ entity }: { entity: Entity }) {
-  const sans = useMSDF(fonts.sans);
-  const mono = useMSDF(fonts.mono);
+  const sans = useMsdf(fonts.sans);
+  const mono = useMsdf(fonts.mono);
   const visible = useEntityVisible(entity);
   const { data } = useActiveScreen();
   const focus = useTransitionOpacity(data?.charterFocus ?? false, {

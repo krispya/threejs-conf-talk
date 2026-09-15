@@ -1,5 +1,5 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useRef } from 'react';
 import type { Group, Node } from 'three/webgpu';
@@ -9,8 +9,8 @@ import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { spiderBenchmarks, threeBridgeBenchmarks } from './data.js';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 
-useMSDF.preload(fonts.sans);
-useMSDF.preload(fonts.mono);
+void useMsdf.preload(fonts.sans);
+void useMsdf.preload(fonts.mono);
 
 /** Measured comparisons sit inside the Math portal. */
 export function BenchmarkRenderer() {
@@ -54,7 +54,7 @@ export function BenchmarkRenderer() {
 }
 
 function BenchmarkScene({ visible, bridge }: { visible: boolean; bridge: boolean }) {
-  const mono = useMSDF(fonts.mono);
+  const mono = useMsdf(fonts.mono);
   const reveal = useTransitionOpacity(visible, {
     duration: visible ? 0.45 : 0.25,
     delay: visible ? 0.25 : 0,
@@ -158,8 +158,8 @@ function BenchmarkMetric({
   detail?: string;
   bars: { height: number; color: string }[];
 }) {
-  const sans = useMSDF(fonts.sans);
-  const mono = useMSDF(fonts.mono);
+  const sans = useMsdf(fonts.sans);
+  const mono = useMsdf(fonts.mono);
   const reveal = useTransitionOpacity(visible, {
     duration: visible ? 0.8 : 0.22,
     delay: visible ? 0.45 + index * 0.14 : 0,

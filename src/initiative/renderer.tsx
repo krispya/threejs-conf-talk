@@ -9,7 +9,7 @@ import {
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import {
   useMutableCallback,
   createPortal,
@@ -106,7 +106,7 @@ function InitiativeView({
   const portrait = useTexture(profile?.avatar ?? profiles[0].avatar, (texture) => {
     texture.colorSpace = SRGBColorSpace;
   });
-  const font = useMSDF(fonts.mono);
+  const font = useMsdf(fonts.mono);
   const label = useRef<Group>(null);
   const chipColumn = useRef<Group>(null);
   const profileRef = useRef<Group>(null);

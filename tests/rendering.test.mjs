@@ -28,6 +28,23 @@ after(async () => {
   await server?.close();
 });
 
+void test('the presentation fonts load with the installed Glyph MSDF renderer', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { glyph } = await import('@pmndrs/glyph');
+  const { msdf } = await import('@pmndrs/glyph/raster/msdf');
+  const { fonts } = await server.ssrLoadModule('/src/theme.ts');
+  for (const source of [fonts.sans, fonts.sansLight, fonts.mono]) {
+    const bytes = await readFile(new URL(`../public/${source}`, import.meta.url));
+    const face = glyph.fontFace(new Blob([bytes]), { format: msdf });
+    try {
+      await face.msdf.load();
+      assert(face.msdf.isLoaded(), source);
+    } finally {
+      face.dispose();
+    }
+  }
+});
+
 void test('the stone portal appears during descent before the glade and sky, with no blackout at the crossing', () => {
   const light = (elapsed, falling) => conjure.portalArrivalLighting(elapsed, falling, 5.2, 2.6);
   assert.deepEqual(light(2.6, true), { portal: 0, environment: 0, sky: 0 });

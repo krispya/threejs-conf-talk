@@ -1,6 +1,6 @@
 import { Time } from '../time/traits.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { useMutableCallback, useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
 import { type ComponentRef, useLayoutEffect, useRef, useMemo } from 'react';
@@ -25,7 +25,7 @@ export function InitiativeFeatureChip({
   profile?: ProfileLogin;
   opacity: ReturnType<typeof useTransitionOpacity>;
 }) {
-  const font = useMSDF(fonts.mono);
+  const font = useMsdf(fonts.mono);
   const world = useWorld();
   const group = useRef<Group>(null);
   const text = useRef<ComponentRef<typeof Text>>(null);

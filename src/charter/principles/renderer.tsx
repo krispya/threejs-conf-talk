@@ -1,6 +1,6 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import {
   useMutableCallback,
   useFrame,
@@ -22,8 +22,8 @@ import { warmUp } from '../../view/utils/warm-up.js';
 import { PrincipleShardsRenderer, type PrincipleWord } from './shards-renderer.js';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 
-useMSDF.preload(fonts.sans);
-useMSDF.preload(fonts.mono);
+void useMsdf.preload(fonts.sans);
+void useMsdf.preload(fonts.mono);
 useLoader.preload(FontLoader, fonts.geometry);
 
 /** An opaque curtain covers the team before the typography enters. */
@@ -34,8 +34,8 @@ export function PrinciplesRenderer({
   camera: ThreeCamera;
   panel: ReturnType<typeof useTransitionOpacity>;
 }) {
-  const font = useMSDF(fonts.sans);
-  const mono = useMSDF(fonts.mono);
+  const font = useMsdf(fonts.sans);
+  const mono = useMsdf(fonts.mono);
   const typeface = useLoader(FontLoader, fonts.geometry);
   const { screen, data } = useActiveScreen();
   const transition = useTrait(screen, ScreenTransition);

@@ -1,5 +1,5 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import { useTrait } from 'koota/react';
 import type { Group, MeshBasicNodeMaterial } from 'three/webgpu';
@@ -12,7 +12,7 @@ import { useTraitBinding } from '../view/hooks.js';
 /** Count the same download snapshot that determines the sphere's area. */
 export function PackageDownloads({ entity }: { entity: Entity }) {
   const { downloads } = useTrait(entity, Package)!;
-  const font = useMSDF(fonts.mono);
+  const font = useMsdf(fonts.mono);
   const width = downloadsLabel(downloads).length * 0.32 * 0.62 + 0.24;
   // animateDownloadCounters raises, counts, and settles the ticker through these parts
   const parts = {
@@ -27,7 +27,6 @@ export function PackageDownloads({ entity }: { entity: Entity }) {
       ref={bind('group')}
       name="weekly-downloads"
       visible={false}
-      renderOrder={2}
       userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
     >
       <mesh position={[0, 0.24, 0]} renderOrder={-1}>
@@ -41,7 +40,7 @@ export function PackageDownloads({ entity }: { entity: Entity }) {
           toneMapped={false}
         />
       </mesh>
-      <TextGroup>
+      <TextGroup renderOrder={2}>
         <Text
           ref={bind('number')}
           name="download-count"

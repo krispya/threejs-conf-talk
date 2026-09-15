@@ -1,5 +1,5 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import type { Group, MeshBasicNodeMaterial } from 'three/webgpu';
 import { FeatureParts, type GlyphLabel } from './traits.js';
@@ -9,7 +9,7 @@ import { useTraitBinding } from '../view/hooks.js';
 
 /** Feature chips follow Three's float and arrive after the packages settle. */
 export function PackageFeatures({ entity }: { entity: Entity }) {
-  const font = useMSDF(fonts.mono);
+  const font = useMsdf(fonts.mono);
   // animateFeatureChips positions and reveals the chips through these parts
   const parts = {
     root: null as Group | null,
@@ -20,12 +20,7 @@ export function PackageFeatures({ entity }: { entity: Entity }) {
   const bind = useTraitBinding(entity, FeatureParts, parts);
 
   return (
-    <group
-      ref={bind('root')}
-      name="three-feature-chips"
-      renderOrder={2}
-      userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
-    >
+    <group ref={bind('root')} name="three-feature-chips" userData={{ [EXCLUDE_FROM_BACKDROP]: true }}>
       {['WebGPURenderer', 'TSL'].map((label, index) => {
         const width = label.length * 0.32 * 0.62 + 0.24;
         return (
@@ -41,7 +36,7 @@ export function PackageFeatures({ entity }: { entity: Entity }) {
                 toneMapped={false}
               />
             </mesh>
-            <TextGroup>
+            <TextGroup renderOrder={2}>
               <Text
                 ref={bind('labels', index)}
                 font={font}

@@ -1,6 +1,6 @@
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { lerp } from 'math';
@@ -11,14 +11,14 @@ import { SRGBColorSpace, type Group, type Node } from 'three/webgpu';
 import { fonts } from '../theme.js';
 import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 
-useMSDF.preload(fonts.sans);
-useMSDF.preload(fonts.mono);
+void useMsdf.preload(fonts.sans);
+void useMsdf.preload(fonts.mono);
 useTexture.preload('./closing/discord-qr.png');
 
 /** The send off: black type on the brand cyan with the Discord invite as a QR code. */
 export function ClosingRenderer() {
-  const sans = useMSDF(fonts.sans);
-  const mono = useMSDF(fonts.mono);
+  const sans = useMsdf(fonts.sans);
+  const mono = useMsdf(fonts.mono);
   const { data } = useActiveScreen();
   const visible = data?.closingVisible ?? false;
   // The glade fades out first, then the words rise and the code follows a beat later

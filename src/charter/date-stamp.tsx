@@ -1,5 +1,5 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { color, hash, mix, positionLocal, smoothstep, vec2 } from 'three/tsl';
 import type { Node } from 'three/webgpu';
@@ -17,7 +17,7 @@ function stampNoise(point: Node<'vec2'>) {
 }
 
 export function CharterDateStamp({ opacity }: { opacity: Node<'float'> }) {
-  const sans = useMSDF(fonts.sans);
+  const sans = useMsdf(fonts.sans);
   const materials = [0.9, 0.34].map((strength, layer) =>
     defineTextMaterial((context) => {
       const material = context.createDefaultMaterial();

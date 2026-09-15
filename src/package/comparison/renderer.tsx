@@ -1,6 +1,6 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
 import { Time } from '../../time/traits.js';
-import { useMSDF } from '@pmndrs/glyph/react/msdf';
+import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { extend, useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
@@ -15,7 +15,7 @@ import { Text, TextGroup } from '@pmndrs/glyph/react';
 
 const MeltMaterial = extend(MeltMaterialImpl);
 
-useMSDF.preload(fonts.mono);
+void useMsdf.preload(fonts.mono);
 for (const example of codeExamples) useTexture.preload(`./code/${example.id}.png`);
 
 export function CodeComparisonRenderer() {
@@ -181,7 +181,7 @@ function CodeArrow() {
 }
 
 function CodePanel({ example }: { example: (typeof codeExamples)[number] }) {
-  const font = useMSDF(fonts.mono);
+  const font = useMsdf(fonts.mono);
   const texture = useTexture(`./code/${example.id}.png`);
   const chipWidth = example.label.length * 0.32 * 0.62 + 0.24;
 
