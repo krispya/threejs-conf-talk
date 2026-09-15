@@ -10,16 +10,16 @@ importers:
     dependencies:
       '@pmndrs/glyph':
         specifier: 0.0.0-canary-50e5ce81-20260901
-        version: 0.0.0-canary-50e5ce81-20260901(@react-three/fiber@10.0.0-canary.c385e9f(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(react@19.2.8)(three@0.185.1)
+        version: 0.0.0-canary-50e5ce81-20260901(@react-three/fiber@10.0.0-alpha.5(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(react@19.2.8)(three@0.185.1)
       '@react-three/fiber':
-        specifier: 10.0.0-canary.c385e9f
-        version: 10.0.0-canary.c385e9f(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
+        specifier: 10.0.0-alpha.5
+        version: 10.0.0-alpha.5(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
       koota:
         specifier: ^0.6.6
         version: 0.6.6(@types/react@19.2.18)(react@19.2.8)
       math:
-        specifier: 1.0.0-canary-37519dcd-20260903
-        version: 1.0.0-canary-37519dcd-20260903
+        specifier: 0.1.0
+        version: 0.1.0
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -377,8 +377,8 @@ packages:
       react-dom:
         optional: true
 
-  '@react-three/fiber@10.0.0-canary.c385e9f':
-    resolution: {integrity: sha512-jRRaxfocLB+LfEeNOLQ5+s8ww+qJ649Di0z1ZYTHKcirFzuHkQaGiG6IR+oJYy0RdHYrgZB6ypf6gEAOl44IMg==}
+  '@react-three/fiber@10.0.0-alpha.5':
+    resolution: {integrity: sha512-NDnHUmaKkHh2IPXl0aUjXgiWhfgvUMbe045IRpXYP0f39FmdWAA+7iG0Kxt4bnb5dbTXTg9fvm+tMfPslM8Lmg==}
     peerDependencies:
       react: '>=19.0 <19.3'
       react-dom: '>=19.0 <19.3'
@@ -1092,8 +1092,8 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  math@1.0.0-canary-37519dcd-20260903:
-    resolution: {integrity: sha512-aul1nzD8ob5wKMKVQqOXe5ufT/xmiTHxObL81J2ImgNRwpRg+r7IeWOQ2WnD5W/cvpZc7gySwXs0YjVpDtahTQ==}
+  math@0.1.0:
+    resolution: {integrity: sha512-hq5KkLblFiR8OO8ZYqPK02mBqrXuxJ6hwvhL3ZM9OFkAR82/20n4H768SWl4yVVrufh8VijEm42D4V9N8hDa2g==}
 
   mdast-util-to-hast@13.2.1:
     resolution: {integrity: sha512-cctsq2wp5vTsLIcaymblUriiTcZd0CwWtCbLvrOzYCDZoWyMNV8sZ7krj09FSnsiJi3WVsHLM4k6Dq/yaPyCXA==}
@@ -1654,7 +1654,7 @@ snapshots:
   '@oxlint/binding-win32-x64-msvc@1.81.0':
     optional: true
 
-  '@pmndrs/glyph@0.0.0-canary-50e5ce81-20260901(@react-three/fiber@10.0.0-canary.c385e9f(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(react@19.2.8)(three@0.185.1)':
+  '@pmndrs/glyph@0.0.0-canary-50e5ce81-20260901(@react-three/fiber@10.0.0-alpha.5(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(react@19.2.8)(three@0.185.1)':
     dependencies:
       '@cto.af/linebreak': 4.0.3
       ajv: 6.15.0
@@ -1662,7 +1662,7 @@ snapshots:
       ktx-parse: 1.1.0
       unicode-segmenter: 0.15.0
     optionalDependencies:
-      '@react-three/fiber': 10.0.0-canary.c385e9f(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
+      '@react-three/fiber': 10.0.0-alpha.5(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
       react: 19.2.8
       three: 0.185.1
 
@@ -1671,7 +1671,7 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  '@react-three/fiber@10.0.0-canary.c385e9f(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)':
+  '@react-three/fiber@10.0.0-alpha.5(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)':
     dependencies:
       '@babel/runtime': 7.29.7
       '@monogrid/gainmap-js': 3.4.0(three@0.185.1)
@@ -2205,7 +2205,7 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  math@1.0.0-canary-37519dcd-20260903: {}
+  math@0.1.0: {}
 
   mdast-util-to-hast@13.2.1:
     dependencies:
