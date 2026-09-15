@@ -1,3 +1,4 @@
+import { useResource } from '../view/hooks.js';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
@@ -7,14 +8,14 @@ import { useFrame, useLoader, useTexture, type ThreeCamera } from '@react-three/
 import { useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
-import { useEffect, useMemo, useRef, type Ref } from 'react';
+import { useEffect, useRef, type Ref } from 'react';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { color } from 'three/tsl';
 import { EdgesGeometry, type Group, type Mesh, type Node, Shape, SRGBColorSpace } from 'three/webgpu';
 import { Timeline } from '../timeline/traits.js';
 import { brand, fonts, ramp } from '../theme.js';
-import { arrivalSpring } from '../view/utils/spring.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { arrivalSpring } from '../transition/utils/spring.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 
 useLoader.preload(GLTFLoader, './meshes/pmndrs.glb');
 useMSDF.preload(fonts.sans);
@@ -68,44 +69,34 @@ export function GreetingRenderer({
   const gearBubble = useRef<Group>(null);
   const thinking = useRef<Group>(null);
   const gear = useRef<Group>(null);
-  const model = useMemo(() => {
-    const geometry = (gltf.scene.getObjectByName('logo') as Mesh).geometry.clone();
-    geometry.center();
-    geometry.scale(0.188, 0.188, 0.97);
-    return { geometry, edges: new EdgesGeometry(geometry) };
-  }, [gltf]);
-  useEffect(
-    () => () => {
-      model.geometry.dispose();
-      model.edges.dispose();
+  const [model] = useResource(
+    () => {
+      const geometry = (gltf.scene.getObjectByName('logo') as Mesh).geometry.clone();
+      geometry.center();
+      geometry.scale(0.188, 0.188, 0.97);
+      return { geometry, edges: new EdgesGeometry(geometry) };
     },
-    [model]
+    ({ geometry, edges }) => {
+      geometry.dispose();
+      edges.dispose();
+    },
+    [gltf]
   );
 
-  const questionMaterial = useMemo(
-    () =>
-      defineTextMaterial((context) => {
-        const material = context.createDefaultMaterial();
-        material.colorNode = color(brand.dark);
-        material.opacityNode =
-          (material.opacityNode as Node<'float'> | null)?.mul(question) ?? question;
-        material.depthWrite = false;
-        return material;
-      }),
-    [question]
-  );
-  const textMaterial = useMemo(
-    () =>
-      defineTextMaterial((context) => {
-        const material = context.createDefaultMaterial();
-        material.colorNode = color(brand.dark);
-        material.opacityNode =
-          (material.opacityNode as Node<'float'> | null)?.mul(caption) ?? caption;
-        material.depthWrite = false;
-        return material;
-      }),
-    [caption]
-  );
+  const questionMaterial = defineTextMaterial((context) => {
+    const material = context.createDefaultMaterial();
+    material.colorNode = color(brand.dark);
+    material.opacityNode = (material.opacityNode as Node<'float'> | null)?.mul(question) ?? question;
+    material.depthWrite = false;
+    return material;
+  });
+  const textMaterial = defineTextMaterial((context) => {
+    const material = context.createDefaultMaterial();
+    material.colorNode = color(brand.dark);
+    material.opacityNode = (material.opacityNode as Node<'float'> | null)?.mul(caption) ?? caption;
+    material.depthWrite = false;
+    return material;
+  });
 
   useEffect(() => {
     if (root.current) onReady(root.current);
@@ -165,6 +156,8 @@ export function GreetingRenderer({
       gear.current.rotation.z = -now * 0.65;
     }
   });
+
+  if (!model) return null;
 
   return (
     <group ref={root} name="hello-poimandres" position={[0, 0, -11]} visible={false}>
@@ -229,23 +222,22 @@ function WaveBubble({
   handRef: Ref<Group>;
   emoji?: 'wave' | 'thinking' | 'gear';
 }) {
-  const shadowOpacity = useMemo(() => opacity.mul(0.16), [opacity]);
-  const shape = useMemo(() => {
-    const shape = new Shape();
-    shape.moveTo(-0.3, -0.43);
-    shape.lineTo(-0.42, -0.7);
-    shape.quadraticCurveTo(-0.12, -0.64, 0.04, -0.43);
-    shape.lineTo(0.3, -0.43);
-    shape.quadraticCurveTo(0.55, -0.43, 0.55, -0.18);
-    shape.lineTo(0.55, 0.18);
-    shape.quadraticCurveTo(0.55, 0.43, 0.3, 0.43);
-    shape.lineTo(-0.3, 0.43);
-    shape.quadraticCurveTo(-0.55, 0.43, -0.55, 0.18);
-    shape.lineTo(-0.55, -0.18);
-    shape.quadraticCurveTo(-0.55, -0.43, -0.3, -0.43);
-    shape.closePath();
-    return shape;
-  }, []);
+  const shadowOpacity = opacity.mul(0.16);
+
+  const shape = new Shape();
+  shape.moveTo(-0.3, -0.43);
+  shape.lineTo(-0.42, -0.7);
+  shape.quadraticCurveTo(-0.12, -0.64, 0.04, -0.43);
+  shape.lineTo(0.3, -0.43);
+  shape.quadraticCurveTo(0.55, -0.43, 0.55, -0.18);
+  shape.lineTo(0.55, 0.18);
+  shape.quadraticCurveTo(0.55, 0.43, 0.3, 0.43);
+  shape.lineTo(-0.3, 0.43);
+  shape.quadraticCurveTo(-0.55, 0.43, -0.55, 0.18);
+  shape.lineTo(-0.55, -0.18);
+  shape.quadraticCurveTo(-0.55, -0.43, -0.3, -0.43);
+  shape.closePath();
+
   const texture = useTexture(`./emoji/${emoji}.png`, (texture) => {
     texture.colorSpace = SRGBColorSpace;
   });

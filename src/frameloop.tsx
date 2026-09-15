@@ -1,7 +1,6 @@
 import { createProfileLayout } from './profile/utils/layout.js';
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
-import { useMemo } from 'react';
 import { profiles } from './profile/data.js';
 import { advanceTimeline } from './timeline/systems.js';
 import {
@@ -23,16 +22,16 @@ import {
 } from './package/systems.js';
 import { updateAnchors } from './letter/systems.js';
 import { floatBodies } from './floating/systems.js';
-import { syncTransforms, syncTransitionUniforms } from './view/systems.js';
-import { captureBackdrop } from './view/glass/systems.js';
+import { syncTransforms } from './view/systems.js';
+import { captureBackdrop } from './glass/systems.js';
 import { composeShowreel } from './background/systems.js';
-import { advanceTransitions } from './transition/systems.js';
+import { advanceTransitions, syncTransitionUniforms } from './transition/systems.js';
 
 // The application owns the order in which domain systems run. Systems run ahead of every view
 // callback, which keeps the default priority, and captures that read the finished frame run last.
 export function FrameLoop() {
   const world = useWorld();
-  const profileLayout = useMemo(() => createProfileLayout(profiles.length), []);
+  const profileLayout = createProfileLayout(profiles.length);
 
   useFrame(
     (state, delta) => {

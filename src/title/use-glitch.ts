@@ -1,3 +1,4 @@
+import { useMutableCallback } from '@react-three/fiber/webgpu';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { useCallback, useMemo, useRef } from 'react';
 import {
@@ -53,12 +54,12 @@ export function useTitleGlitch() {
     };
   }, []);
 
+  const effectRef = useMutableCallback(effect);
   // The title view runs this step in its frame callback. The result stays referentially stable
   // between screens because the title memoizes shader nodes on it.
   const step = useCallback<FrameStep>(
     (state) => {
-      // TSL uniforms carry mutable shader state outside React.
-      /* oxlint-disable react/immutability */
+      const effect = effectRef.current;
       effect.active.value = 0;
       const timing = clock.current;
       if (!idle) {
@@ -93,9 +94,8 @@ export function useTitleGlitch() {
         effect.shift.value = timing.direction * (burst < 0.075 ? 7 : -4);
         effect.chroma.value = burst < 0.075 ? 3 : 1.5;
       }
-      /* oxlint-enable react/immutability */
     },
-    [effect, idle]
+    [effectRef, idle]
   );
 
   return useMemo(() => ({ ...effect, step }), [effect, step]);

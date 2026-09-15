@@ -1,26 +1,22 @@
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
-import { useMemo } from 'react';
 import type { Group, MeshBasicNodeMaterial } from 'three/webgpu';
 import { FeatureParts, type GlyphLabel } from './traits.js';
 import { fonts } from '../theme.js';
-import { EXCLUDE_FROM_BACKDROP } from '../view/glass/transmission-backdrop.js';
+import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { useTraitBinding } from '../view/hooks.js';
 
 /** Feature chips follow Three's float and arrive after the packages settle. */
 export function PackageFeatures({ entity }: { entity: Entity }) {
   const font = useMSDF(fonts.mono);
   // animateFeatureChips positions and reveals the chips through these parts
-  const parts = useMemo(
-    () => ({
-      root: null as Group | null,
-      chips: [] as (Group | null)[],
-      labels: [] as (GlyphLabel | null)[],
-      materials: [] as (MeshBasicNodeMaterial | null)[],
-    }),
-    []
-  );
+  const parts = {
+    root: null as Group | null,
+    chips: [] as (Group | null)[],
+    labels: [] as (GlyphLabel | null)[],
+    materials: [] as (MeshBasicNodeMaterial | null)[],
+  };
   const bind = useTraitBinding(entity, FeatureParts, parts);
 
   return (

@@ -16,7 +16,7 @@ import { color, smoothstep, normalView, uv } from 'three/tsl';
 import type { Group, Node } from 'three/webgpu';
 import { charter } from './data.js';
 import { brand, fonts, ramp } from '../theme.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { CharterDateStamp } from './date-stamp.js';
 import { CharterMarker } from './marker.js';
 
@@ -225,7 +225,7 @@ function CharterView({ entity }: { entity: Entity }) {
                 }}
                 onPointerOver={() => {
                   if (entity.has(IsHidden) || progress.value < 0.99) return;
-                  previousCursor.current ??= canvas.style.cursor;
+                  if (previousCursor.current === null) previousCursor.current = canvas.style.cursor;
                   canvas.style.setProperty('cursor', 'pointer');
                 }}
                 onPointerOut={resetCursor}
@@ -244,10 +244,7 @@ function CharterView({ entity }: { entity: Entity }) {
 /** Thin solid panels let the folds cover the printed faces as the sheet closes. */
 
 function PaperPanel({ children, opacity }: { children: ReactNode; opacity: Node<'float'> }) {
-  const paper = useMemo(
-    () => color(ramp['light-25']).mul(normalView.z.abs().mul(0.18).add(0.82)),
-    []
-  );
+  const paper = color(ramp['light-25']).mul(normalView.z.abs().mul(0.18).add(0.82));
   return (
     <>
       <mesh renderOrder={4}>
@@ -267,14 +264,11 @@ function PaperPanel({ children, opacity }: { children: ReactNode; opacity: Node<
 
 /** A soft trough and a fine highlight leave a crease after the fold opens. */
 function Crease({ opacity }: { opacity: Node<'float'> }) {
-  const crease = useMemo(
-    () => ({
-      shadow: uv().y.oneMinus().mul(-6).exp().mul(0.18).mul(opacity),
-      line: opacity.mul(0.14),
-      highlight: opacity.mul(0.7),
-    }),
-    [opacity]
-  );
+  const crease = {
+    shadow: uv().y.oneMinus().mul(-6).exp().mul(0.18).mul(opacity),
+    line: opacity.mul(0.14),
+    highlight: opacity.mul(0.7),
+  };
   return (
     <>
       <mesh position={[0, -0.35, 0]} renderOrder={5}>

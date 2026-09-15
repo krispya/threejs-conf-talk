@@ -10,7 +10,7 @@ export const fonts = {
   sans: { baked: './fonts/geist-black.font.glb' },
   /** Geist Regular, the light counterpart for secondary lines */
   sansLight: { baked: './fonts/geist-regular.font.glb' },
-  /** Geist Mono Medium — https://fonts.google.com/specimen/Geist+Mono */
+  /** Geist Mono Medium https://fonts.google.com/specimen/Geist+Mono */
   mono: { baked: './fonts/geist-mono.font.glb' },
 } as const;
 

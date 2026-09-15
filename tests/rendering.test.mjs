@@ -21,7 +21,7 @@ let conjure;
 before(async () => {
   server = await createServer({ server: { middlewareMode: true, ws: false }, appType: 'custom' });
   video = await server.ssrLoadModule('/src/background/showreel/motion.ts');
-  capture = await server.ssrLoadModule('/src/view/glass/transmission-backdrop.ts');
+  capture = await server.ssrLoadModule('/src/glass/transmission-backdrop.ts');
   conjure = await server.ssrLoadModule('/src/initiative/utils/portal-motion.ts');
 });
 after(async () => {
@@ -297,10 +297,17 @@ void test('video resources pause under blackout and are released across mount an
   t.after(() => {
     globalThis.document = originalDocument;
   });
-  const source = sourceModule.createShowreelSource();
-  assert.equal(elements.length, 0);
   const motion = video.createShowreelMotion();
+  let previousTarget;
   for (let mount = 0; mount < 2; mount++) {
+    const source = sourceModule.createShowreelSource();
+    assert.equal(elements.length, mount * 17);
+    assert.notEqual(source.target, previousTarget);
+    previousTarget = source.target;
+    let targetDisposed = false;
+    source.target.addEventListener('dispose', () => {
+      targetDisposed = true;
+    });
     sourceModule.mountShowreel(source);
     assert.equal(source.clips.length, 17);
     assert.equal(source.wall.children.length, 16);
@@ -314,6 +321,7 @@ void test('video resources pause under blackout and are released across mount an
     assert(source.clips.every((clip) => clip.video.paused));
     assert.equal(source.clips[0].video.currentTime, 7);
     sourceModule.disposeShowreel(source);
+    assert(targetDisposed);
     assert.equal(source.wall.children.length, 0);
     assert.equal(source.scene.children.length, 1);
     assert(elements.every((element) => element.paused && !element.src));

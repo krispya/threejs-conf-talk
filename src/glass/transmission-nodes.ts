@@ -49,7 +49,7 @@ import type { Color, Node, TextureNode } from 'three/webgpu';
 const MAX_TRANSMISSION_SAMPLES = 16;
 const PI2 = 6.28318530718;
 
-// TSL's Fn takes loosely typed node tuples; `any` keeps the port readable.
+// TSL's Fn takes loosely typed node tuples. `any` keeps the port readable.
 /* oxlint-disable typescript/no-explicit-any */
 type N = any;
 const fn: N = Fn;

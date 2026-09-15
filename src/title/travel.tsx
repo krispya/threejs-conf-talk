@@ -1,9 +1,9 @@
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { float, smoothstep, uv } from 'three/tsl';
 import { DynamicDrawUsage, Vector3, type InstancedMesh } from 'three/webgpu';
 import { createTitleTrails, updateTitleTrails } from './utils/trails.js';
 import { useFrameStep, type FrameStep } from '../view/hooks.js';
-import type { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import type { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import type { useTitleFlight } from './use-flight.js';
 import type { usePortal } from './use-portal.js';
 
@@ -22,14 +22,13 @@ export function TitleTravel({
   steps: Set<FrameStep>;
 }) {
   const mesh = useRef<InstancedMesh>(null);
-  const trails = useMemo(() => createTitleTrails(480), []);
-  const origin = useMemo(() => new Vector3(0, 0, depth), [depth]);
-  const softness = useMemo(() => {
-    const across = uv().y.sub(0.5).mul(2).abs();
-    const core = float(1).sub(smoothstep(0.2, 1, across));
-    const trail = smoothstep(0, 0.9, uv().x).mul(float(1).sub(smoothstep(0.92, 1, uv().x)));
-    return core.mul(trail).mul(opacity).mul(portal.outside).mul(0.7);
-  }, [opacity, portal.outside]);
+  const trails = createTitleTrails(480);
+  const origin = new Vector3(0, 0, depth);
+
+  const across = uv().y.sub(0.5).mul(2).abs();
+  const core = float(1).sub(smoothstep(0.2, 1, across));
+  const trail = smoothstep(0, 0.9, uv().x).mul(float(1).sub(smoothstep(0.92, 1, uv().x)));
+  const softness = core.mul(trail).mul(opacity).mul(portal.outside).mul(0.7);
 
   // Runs after the flight clock and portal steps of the title's frame callback
   useFrameStep(steps, (state) => {

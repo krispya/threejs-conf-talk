@@ -6,7 +6,7 @@ import { useFrame } from '@react-three/fiber/webgpu';
 import { useQuery, useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
-import { useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { type Group, type Mesh, type MeshBasicNodeMaterial, Color } from 'three/webgpu';
 import { Timeline } from '../timeline/traits.js';
 import { Package, PackageParts, PackagePresence, PackageSizing, type GlyphLabel } from './traits.js';
@@ -20,8 +20,8 @@ import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import { packageLabelSize } from './utils/sizing.js';
 import { brand, fonts, spectrum } from '../theme.js';
-import { GlassMaterial } from '../view/glass/glass-material.js';
-import { EXCLUDE_FROM_BACKDROP } from '../view/glass/transmission-backdrop.js';
+import { GlassMaterial } from '../glass/glass-material.js';
+import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { PackageDownloads } from './downloads.js';
 import { PackageFeatures } from './features.js';
 import { PackageMaintainers } from './maintainers.js';
@@ -110,27 +110,21 @@ function PackageView({ entity, showMaintainers }: { entity: Entity; showMaintain
   const visible = useEntityVisible(entity);
   const present = useEntityPresent(entity);
   const { fontSize, width } = packageLabelSize(radius, nameLabel);
-  const parts = useMemo(
-    () => ({
-      body: null as Mesh | null,
-      label: null as GlyphLabel | null,
-      labelGroup: null as Group | null,
-      chip: null as MeshBasicNodeMaterial | null,
-    }),
-    []
-  );
+  const parts = {
+    body: null as Mesh | null,
+    label: null as GlyphLabel | null,
+    labelGroup: null as Group | null,
+    chip: null as MeshBasicNodeMaterial | null,
+  };
   const bind = useTraitBinding(entity, PackageParts, parts);
 
   const bindView = useViewBinding(entity);
-  const handleInit = useCallback(
-    (group: Group | null) => {
-      if (!group) return;
-      const presence = entity.get(PackagePresence)?.value ?? 0;
-      group.scale.setScalar(Math.max(0.001, (presence * entity.get(Size)!.radius) / radius));
-      return bindView(group);
-    },
-    [entity, radius, bindView]
-  );
+  const handleInit = (group: Group | null) => {
+    if (!group) return;
+    const presence = entity.get(PackagePresence)?.value ?? 0;
+    group.scale.setScalar(Math.max(0.001, (presence * entity.get(Size)!.radius) / radius));
+    return bindView(group);
+  };
 
   return (
     <>
@@ -200,7 +194,7 @@ const labelMaterial = defineTextMaterial((context) => {
   return material;
 });
 
-/** Every third blob stays perfectly clear; the rest carry a faint brand tint. */
+/** Every third blob stays perfectly clear. The rest carry a faint brand tint. */
 function tintFor(index: number) {
   if (index % 3 === 0) return '#ffffff';
   const tint = new Color('#ffffff').lerp(new Color(spectrum[index % spectrum.length]), 0.14);

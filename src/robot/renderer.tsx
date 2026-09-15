@@ -1,11 +1,12 @@
+import { useResource } from '../view/hooks.js';
 import { createRobotModel, createRobotEyeNodes } from './utils/resources.js';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
-import { useFrame, useLoader } from '@react-three/fiber/webgpu';
+import { useMutableCallback, useFrame, useLoader } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { uniform } from 'three/tsl';
 import { AdditiveBlending, Group } from 'three/webgpu';
@@ -14,7 +15,7 @@ import { communityDepartureTime } from '../profile/utils/motion.js';
 import { teamLayout } from '../profile/utils/layout.js';
 import { withMeshopt } from '../view/utils/load-gltf.js';
 import { warmUp } from '../view/utils/warm-up.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 
 useLoader.preload(GLTFLoader, './meshes/robot_emoji_apple/scene.glb', withMeshopt);
 
@@ -60,18 +61,30 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
   // uniforms instead of rebuilding its shader when metalness reaches zero
   const metalness = useMemo(() => uniform(0.7), []);
   const roughness = useMemo(() => uniform(0.32), []);
-  const model = useMemo(
-    () => createRobotModel(gltf.scene, opacity, friendly, metalness, roughness),
-    [gltf, opacity, friendly, metalness, roughness]
-  );
-  useEffect(
-    () => () => {
+  const [model, modelRef] = useResource(
+    () => {
+      const model = createRobotModel(gltf.scene, opacity, friendly, metalness, roughness);
+      warmed.current = false;
+      return model;
+    },
+    (model) => {
       model.materials.forEach((material) => material.dispose());
       model.uplight.dispose();
     },
-    [model]
+    [gltf, opacity, friendly, metalness, roughness]
   );
-  // Nodes built during render are new objects every time, and a new node rebuilds its shader
+  const uniformsRef = useMutableCallback({
+    opacity,
+    eyes,
+    fault,
+    laser,
+    flare,
+    swirl,
+    spin,
+    spread,
+    metalness,
+    roughness,
+  });
   const eye = useMemo(
     () => createRobotEyeNodes(community, fault, eyes, flare, laser, swirl, spin, spread),
     [community, fault, eyes, flare, laser, swirl, spin, spread]
@@ -86,6 +99,10 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
   }, [visible, warping, timing, community]);
 
   useFrame((state) => {
+    const model = modelRef.current;
+    const { opacity, eyes, fault, laser, flare, swirl, spin, spread, metalness, roughness } =
+      uniformsRef.current;
+    if (!model) return;
     if (!root.current || !head.current) return;
     if (community && data?.profilesVisible && !warmed.current && state.renderer.hasInitialized()) {
       void warmUp(state.renderer, root.current, state.camera, state.scene);
@@ -175,8 +192,6 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
     head.current.updateWorldMatrix(true, false);
     model.lighting.matrix.copy(head.current.matrixWorld);
     model.lighting.updateMatrixWorld(true);
-    // Shadow cameras and TSL uniforms hold mutable render state outside React.
-    /* oxlint-disable react/immutability */
     model.uplight.shadow.camera.near = scale * 0.5;
     model.uplight.shadow.camera.far = scale * 12;
     model.uplight.shadow.camera.updateProjectionMatrix();
@@ -233,8 +248,9 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
     swirl.value = community ? reveal.value * (1 - friendly.value) : 0;
     spread.value = community ? easing.cubicInOut(clamp((reveal.rise * 3.8 - 1.8) / 1.4, 0, 1)) : 0;
     spin.value = now * 1.9;
-    /* oxlint-enable react/immutability */
   });
+
+  if (!model) return null;
 
   return (
     <group ref={root} name={community ? 'community-robot' : 'robot-reveal'} visible={false}>

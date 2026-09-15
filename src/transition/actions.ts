@@ -2,7 +2,8 @@ import { createActions, type Entity } from 'koota';
 import { easing } from 'math/time';
 import { Time } from '../time/traits.js';
 import { ActiveScreen, ScreenTransition, Timeline } from '../timeline/traits.js';
-import { Transition } from './traits.js';
+import { Transition, TransitionUniform } from './traits.js';
+import type { UniformNode } from 'three/webgpu';
 
 export type TransitionOptions = {
   restartOnChange?: boolean;
@@ -16,6 +17,11 @@ export type TransitionOptions = {
 };
 
 export const transitionActions = createActions((world) => ({
+  attachUniform: (entity: Entity, node: UniformNode<'float', number>) => {
+    if (entity.has(TransitionUniform)) entity.set(TransitionUniform, node);
+    else entity.add(TransitionUniform(node));
+  },
+
   createTransition: (
     value = 0,
     { ready = true, restartKey }: Pick<TransitionOptions, 'ready' | 'restartKey'> = {}

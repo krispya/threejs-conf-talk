@@ -19,7 +19,7 @@ import {
 } from 'three/tsl';
 import { backdrop } from '../../theme.js';
 
-// TSL nodes are loosely typed; `any` keeps the shader readable.
+// TSL nodes are loosely typed. `any` keeps the shader readable.
 /* oxlint-disable typescript/no-explicit-any */
 type N = any;
 
@@ -98,7 +98,7 @@ export const gradientNode = Fn(() => {
   const p = uv().toVar();
   const morph = cameraPosition.z.sub(12).div(108).clamp();
 
-  // Lavender base, slightly lighter toward the top; the split slides up and down
+  // Lavender base, slightly lighter toward the top. The split slides up and down
   const split = p.y.add(drift(0.21, 0.7).mul(0.12)).clamp();
   const base = mix(color(backdrop.bottom), color(backdrop.top), split).toVar();
 

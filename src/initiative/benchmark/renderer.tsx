@@ -1,10 +1,10 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import { useFrame } from '@react-three/fiber/webgpu';
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import type { Group, Node } from 'three/webgpu';
 import { fonts, brand, ramp } from '../../theme.js';
-import { useTransitionOpacity } from '../../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../../transition/use-transition-opacity.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { spiderBenchmarks, threeBridgeBenchmarks } from './data.js';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
@@ -21,7 +21,7 @@ export function BenchmarkRenderer() {
     duration: visible ? 0.5 : 0.4,
     clock: 'frames',
   });
-  const backing = useMemo(() => reveal.mul(0.96), [reveal]);
+  const backing = reveal.mul(0.96);
   const root = useRef<Group>(null);
 
   useFrame(() => {
@@ -60,7 +60,7 @@ function BenchmarkScene({ visible, bridge }: { visible: boolean; bridge: boolean
     delay: visible ? 0.25 : 0,
     clock: 'frames',
   });
-  const ink = useBenchmarkInk(reveal);
+  const ink = createBenchmarkInk(reveal);
   const root = useRef<Group>(null);
   const { spiders, math, three } = spiderBenchmarks[spiderBenchmarks.length - 1]!;
 
@@ -165,7 +165,7 @@ function BenchmarkMetric({
     delay: visible ? 0.45 + index * 0.14 : 0,
     clock: 'frames',
   });
-  const ink = useBenchmarkInk(reveal);
+  const ink = createBenchmarkInk(reveal);
   const root = useRef<Group>(null);
   const columns = useRef<Group>(null);
 
@@ -278,17 +278,12 @@ function BenchmarkMetric({
   );
 }
 
-function useBenchmarkInk(opacity: ReturnType<typeof useTransitionOpacity>) {
-  return useMemo(
-    () =>
-      defineTextMaterial((context) => {
-        const material = context.createDefaultMaterial();
-        material.opacityNode =
-          (material.opacityNode as Node<'float'> | null)?.mul(opacity) ?? opacity;
-        material.depthTest = false;
-        material.depthWrite = false;
-        return material;
-      }),
-    [opacity]
-  );
+function createBenchmarkInk(opacity: ReturnType<typeof useTransitionOpacity>) {
+  return defineTextMaterial((context) => {
+    const material = context.createDefaultMaterial();
+    material.opacityNode = (material.opacityNode as Node<'float'> | null)?.mul(opacity) ?? opacity;
+    material.depthTest = false;
+    material.depthWrite = false;
+    return material;
+  });
 }

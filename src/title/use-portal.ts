@@ -1,6 +1,6 @@
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
-import { useFrame } from '@react-three/fiber/webgpu';
+import { useMutableCallback, useFrame } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';
 import { clamp } from 'math';
 import { useMemo } from 'react';
@@ -19,6 +19,7 @@ export function usePortal() {
   const timing = useTrait(timeline, Timeline);
   const progress = useMemo(() => uniform(0), []);
   const radius = useMemo(() => uniform(0), []);
+  const uniformsRef = useMutableCallback({ progress, radius });
   const shape = useMemo(() => {
     const p = screenUV
       .sub(0.5)
@@ -41,8 +42,8 @@ export function usePortal() {
   }, [progress, radius]);
 
   const step: FrameStep = (state) => {
+    const { progress, radius } = uniformsRef.current;
     // Hold the opening after crossing so the old scenery cannot reappear
-    /* oxlint-disable react/immutability */
     progress.value = data?.warpVisible
       ? clamp(
           (world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - 1.15) /
@@ -54,7 +55,6 @@ export function usePortal() {
         ? 0
         : 1;
     radius.value = progress.value ** 3 * (Math.hypot(state.size.width / state.size.height, 1) + 0.5);
-    /* oxlint-enable react/immutability */
   };
 
   return { progress, radius, step, ...shape };
@@ -73,6 +73,7 @@ export function usePortalRipples() {
     }),
     []
   );
+  const stateRef = useMutableCallback(state);
   const nodes = useMemo(() => {
     const aspect = vec2(screenSize.x.div(screenSize.y), 1);
     const point = screenUV.sub(state.center).mul(aspect);
@@ -111,10 +112,9 @@ export function usePortalRipples() {
   }, [state]);
 
   useFrame((frame) => {
+    const state = stateRef.current;
     const timeline = world.queryFirst(Timeline);
     const screen = timeline?.targetFor(ActiveScreen);
-    // TSL uniforms carry mutable render state outside React
-    /* oxlint-disable react/immutability */
     state.enabled.value =
       screen?.get(Screen)?.initiativePortalVisible && frame.camera.position.z > 0 ? 1 : 0;
     if (!state.enabled.value) return;
@@ -123,7 +123,6 @@ export function usePortalRipples() {
     frame.camera.updateMatrixWorld();
     state.origin.set(0, 0, 0).project(frame.camera);
     state.center.value.set(0.5 + state.origin.x * 0.5, 0.5 - state.origin.y * 0.5);
-    /* oxlint-enable react/immutability */
   });
 
   return nodes;

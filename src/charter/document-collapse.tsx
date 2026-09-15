@@ -1,3 +1,4 @@
+import { useResource, useFrameStep, type FrameStep } from '../view/hooks.js';
 import {
   createCollapseUniforms,
   createCollapseNodes,
@@ -5,7 +6,7 @@ import {
   createCollapseResources,
 } from './utils/collapse.js';
 import { Time } from '../time/traits.js';
-import { useThree } from '@react-three/fiber/webgpu';
+import { useMutableCallback, useThree } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
@@ -16,11 +17,11 @@ import {
   type Group,
   type Mesh,
   type PerspectiveCamera,
+  type WebGPURenderer,
 } from 'three/webgpu';
 import { ActiveScreen, PreviousScreen, Screen, Timeline } from '../timeline/traits.js';
-import { EXCLUDE_FROM_BACKDROP } from '../view/glass/transmission-backdrop.js';
-import { useFrameStep, type FrameStep } from '../view/hooks.js';
-import type { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
+import type { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { warmUp } from '../view/utils/warm-up.js';
 
 /** Fraction of the way from `from` to `to`, clamped. */
@@ -30,18 +31,40 @@ const ramp = (t: number, from: number, to: number) => clamp((t - from) / (to - f
  * The framed document is captured once as a printed surface, then crumples, tears into shards that
  * spiral into a black hole, and pops. Every beat is timed in seconds from the transition start.
  */
-export function DocumentCollapse({
+export function DocumentCollapse(
+  props: Omit<Parameters<typeof DocumentCollapseView>[0], 'resources' | 'geometry'>
+) {
+  const { width, height } = props;
+  const [owned] = useResource(
+    () => ({
+      resources: createCollapseResources(width, height),
+      geometry: createCollapseGeometry(width, height),
+    }),
+    ({ resources, geometry }) => {
+      geometry.dispose();
+      resources.target.dispose();
+    },
+    [width, height]
+  );
+  return owned ? <DocumentCollapseView {...props} {...owned} /> : null;
+}
+
+function DocumentCollapseView({
   sheet,
   progress,
   width,
   height,
   steps,
+  resources,
+  geometry,
 }: {
   sheet: RefObject<Group | null>;
   progress: ReturnType<typeof useTransitionOpacity>;
   width: number;
   height: number;
   steps: Set<FrameStep>;
+  resources: ReturnType<typeof createCollapseResources>;
+  geometry: ReturnType<typeof createCollapseGeometry>;
 }) {
   const world = useWorld();
   const renderer = useThree((state) => state.renderer);
@@ -54,12 +77,11 @@ export function DocumentCollapse({
   const warpMesh = useRef<Mesh>(null);
   const captured = useRef(false);
   const baseFov = useRef(0);
-  const resources = useMemo(() => createCollapseResources(width, height), [width, height]);
   const u = useMemo(() => createCollapseUniforms(), []);
+  const mutableRef = useMutableCallback({ resources, u });
 
   useEffect(() => {
     captured.current = false;
-    return () => resources.target.dispose();
   }, [resources]);
   // Compile the collapse effects and the sheet capture ahead of the transition that shows them
   useEffect(() => {
@@ -68,20 +90,15 @@ export function DocumentCollapse({
       void warmUp(renderer, sheet.current, resources.camera, undefined, resources.target);
   }, [renderer, camera, scene, resources, sheet]);
 
-  // Unshared triangles let the sheet tear. Each carries its centroid and a tear order that
-  // favors the middle, so the shards nearest the hole go first.
-  const geometry = useMemo(() => createCollapseGeometry(width, height), [width, height]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
   const nodes = useMemo(
     () => createCollapseNodes(u, resources, width, height),
     [resources, u, width, height]
   );
 
-  // TSL uniforms carry mutable render state outside React
-  /* oxlint-disable react/immutability */
   // Steps after the announcement has placed the sheet for this frame
   useFrameStep(steps, (state, delta) => {
+    const { resources, u } = mutableRef.current;
+    const { renderer } = state;
     const view = group.current;
     const paper = sheet.current;
     if (!view || !paper) return;
@@ -132,26 +149,10 @@ export function DocumentCollapse({
       resources.camera.updateProjectionMatrix();
       resources.camera.updateMatrixWorld();
 
-      const target = renderer.getRenderTarget();
-      const autoClear = renderer.autoClear;
-      const alpha = renderer.getClearAlpha();
-      const shown = paper.visible;
-      renderer.getClearColor(resources.clearColor);
-      try {
-        paper.visible = true;
-        renderer.setRenderTarget(resources.target);
-        renderer.setClearColor(0x000000, 0);
-        renderer.autoClear = true;
-        renderer.render(paper, resources.camera);
-        captured.current = true;
-        baseFov.current = camera.fov;
-        resources.previous.copy(camera.position);
-      } finally {
-        paper.visible = shown;
-        renderer.setRenderTarget(target);
-        renderer.setClearColor(resources.clearColor, alpha);
-        renderer.autoClear = autoClear;
-      }
+      captureSheet(renderer, paper, resources);
+      captured.current = true;
+      baseFov.current = camera.fov;
+      resources.previous.copy(camera.position);
     }
 
     // Flight: the camera's measured speed drives the streaks, a wider field of view, and
@@ -250,7 +251,6 @@ export function DocumentCollapse({
       u.shockPush.value = popped ? 0.05 * (1 - shock) ** 2 : 0;
     }
   });
-  /* oxlint-enable react/immutability */
 
   return (
     <group ref={group} name="announcement-collapse" visible={false}>
@@ -339,4 +339,28 @@ export function DocumentCollapse({
       </group>
     </group>
   );
+}
+
+function captureSheet(
+  renderer: WebGPURenderer,
+  paper: Group,
+  resources: ReturnType<typeof createCollapseResources>
+) {
+  const target = renderer.getRenderTarget();
+  const autoClear = renderer.autoClear;
+  const alpha = renderer.getClearAlpha();
+  const shown = paper.visible;
+  renderer.getClearColor(resources.clearColor);
+  try {
+    paper.visible = true;
+    renderer.setRenderTarget(resources.target);
+    renderer.setClearColor(0x000000, 0);
+    renderer.autoClear = true;
+    renderer.render(paper, resources.camera);
+  } finally {
+    paper.visible = shown;
+    renderer.setRenderTarget(target);
+    renderer.setClearColor(resources.clearColor, alpha);
+    renderer.autoClear = autoClear;
+  }
 }

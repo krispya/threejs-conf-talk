@@ -5,11 +5,11 @@ import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { lerp } from 'math';
 import { easing } from 'math/time';
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { smoothstep } from 'three/tsl';
 import { SRGBColorSpace, type Group, type Node } from 'three/webgpu';
 import { fonts } from '../theme.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 
 useMSDF.preload(fonts.sans);
 useMSDF.preload(fonts.mono);
@@ -37,19 +37,14 @@ export function ClosingRenderer() {
   const qr = useTexture('./closing/discord-qr.png', (texture) => {
     texture.colorSpace = SRGBColorSpace;
   });
-  const ink = useMemo(
-    () =>
-      defineTextMaterial((context) => {
-        const material = context.createDefaultMaterial();
-        material.opacityNode =
-          (material.opacityNode as Node<'float'> | null)?.mul(progress) ?? progress;
-        material.depthTest = false;
-        material.depthWrite = false;
-        return material;
-      }),
-    [progress]
-  );
-  const codeOpacity = useMemo(() => smoothstep(0, 0.5, code), [code]);
+  const ink = defineTextMaterial((context) => {
+    const material = context.createDefaultMaterial();
+    material.opacityNode = (material.opacityNode as Node<'float'> | null)?.mul(progress) ?? progress;
+    material.depthTest = false;
+    material.depthWrite = false;
+    return material;
+  });
+  const codeOpacity = smoothstep(0, 0.5, code);
   const root = useRef<Group>(null);
   const chip = useRef<Group>(null);
   const words = useRef<Group>(null);

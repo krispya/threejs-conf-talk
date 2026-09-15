@@ -1,3 +1,4 @@
+import { useMutableCallback } from '@react-three/fiber/webgpu';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
 import { useTrait, useWorld } from 'koota/react';
@@ -8,7 +9,7 @@ import { uniform } from 'three/tsl';
 import { Euler, Matrix4, Quaternion, Vector3, type Group } from 'three/webgpu';
 import { Timeline } from '../timeline/traits.js';
 import type { FrameStep } from '../view/hooks.js';
-import { arrivalSpring } from '../view/utils/spring.js';
+import { arrivalSpring } from '../transition/utils/spring.js';
 
 /**
  * One travel clock keeps the objects and trails continuous as the flight accelerates.
@@ -20,6 +21,7 @@ export function useTitleFlight() {
   const timing = useTrait(timeline, Timeline);
   const scrim = useMemo(() => uniform(0), []);
   const speed = useMemo(() => uniform(0), []);
+  const uniformsRef = useMutableCallback({ speed, scrim });
   const scenery = useRef<Group>(null);
   const shakeTransform = useRef({
     position: new Vector3(),
@@ -70,6 +72,7 @@ export function useTitleFlight() {
   ]);
 
   const step: FrameStep = (state, delta) => {
+    const { speed, scrim } = uniformsRef.current;
     const flight = motion.current;
     const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0);
     flight.boost = lerp(
@@ -80,8 +83,6 @@ export function useTitleFlight() {
     if (data?.warpVisible)
       flight.warp = clamp(elapsed / Math.max(0.001, timing?.duration ?? 0), 0, 1);
     flight.time += delta * (Math.min(1, flight.boost) + flight.boost * 7);
-    // TSL uniforms hold mutable render state outside React
-    // oxlint-disable-next-line react/immutability
     speed.value = flight.boost;
     const enteringPackages = cruising && data?.packageLayout === 'pair' && !data.robotVisible;
     const duration = data?.robotVisible
@@ -96,8 +97,6 @@ export function useTitleFlight() {
           )
         : 0.9;
     const progress = duration <= 0 ? 1 : clamp((elapsed - flight.delay) / duration, 0, 1);
-    // TSL uniforms hold mutable render state outside React
-    // oxlint-disable-next-line react/immutability
     scrim.value = lerp(
       flight.scrimFrom,
       cruising &&

@@ -1,6 +1,6 @@
-import { createContext, useContext, useLayoutEffect, type ReactNode, useMemo } from 'react';
-import { useSpawnedParts } from '../hooks.js';
-import { Backdrop } from '../traits.js';
+import { useResource, useSpawnedParts } from '../view/hooks.js';
+import { createContext, useContext, useLayoutEffect, type ReactNode } from 'react';
+import { Backdrop } from './traits.js';
 import {
   createTransmissionBackdrop,
   disposeTransmissionBackdrop,
@@ -22,17 +22,19 @@ export function TransmissionBackdropProvider({
   resolution?: number;
   backsideResolution?: number;
 }) {
-  const backdrop = useMemo(() => createTransmissionBackdrop(), []);
+  const [backdrop, backdropRef] = useResource(
+    createTransmissionBackdrop,
+    disposeTransmissionBackdrop,
+    []
+  );
   useLayoutEffect(() => {
-    // Capture resources are mutable render state, independent of React's display state.
-    /* oxlint-disable react/immutability */
-    backdrop.resolution = resolution;
-    backdrop.backsideResolution = backsideResolution;
-    /* oxlint-enable react/immutability */
-  }, [backdrop, resolution, backsideResolution]);
-  useLayoutEffect(() => () => disposeTransmissionBackdrop(backdrop), [backdrop]);
+    const capture = backdropRef.current;
+    if (!capture) return;
+    capture.resolution = resolution;
+    capture.backsideResolution = backsideResolution;
+  }, [backdrop, backdropRef, resolution, backsideResolution]);
   useSpawnedParts(Backdrop, backdrop);
-  return <BackdropContext value={backdrop}>{children}</BackdropContext>;
+  return backdrop ? <BackdropContext value={backdrop}>{children}</BackdropContext> : null;
 }
 
 export function useTransmissionBackdrop() {

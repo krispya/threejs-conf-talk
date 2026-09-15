@@ -1,4 +1,5 @@
 import { trait } from 'koota';
+import type { UniformNode } from 'three/webgpu';
 import { easing } from 'math/time';
 
 /** A normalized transition, independent of the object that displays it. */
@@ -15,3 +16,6 @@ export const Transition = trait({
   ready: true,
   restartKey: () => undefined as string | undefined,
 });
+
+/** Shader uniform that mirrors a world transition for its materials. */
+export const TransitionUniform = trait(() => null! as UniformNode<'float', number>);

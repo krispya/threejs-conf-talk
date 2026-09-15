@@ -4,7 +4,7 @@ import { Camera } from './traits.js';
 import { useViewBinding } from '../view/hooks.js';
 import { useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { PerspectiveCamera } from 'three/webgpu';
 
 export function CameraRenderer() {
@@ -21,28 +21,25 @@ function CameraView({ entity }: { entity: Entity }) {
   const cameraRef = useRef<PerspectiveCamera | null>(null);
 
   const bindView = useViewBinding(entity);
-  const handleInit = useCallback(
-    (camera: PerspectiveCamera | null) => {
-      if (!camera) return;
-      cameraRef.current = camera;
-      const previousCamera = get().camera;
-      const position = entity.get(Position)!;
-      const rotation = entity.get(Rotation)!;
-      camera.position.set(position.x, position.y, position.z);
-      camera.rotation.set(rotation.x, rotation.y, rotation.z);
-      camera.updateMatrixWorld();
-      camera.updateProjectionMatrix();
-      const release = bindView(camera);
-      set({ camera });
+  const handleInit = (camera: PerspectiveCamera | null) => {
+    if (!camera) return;
+    cameraRef.current = camera;
+    const previousCamera = get().camera;
+    const position = entity.get(Position)!;
+    const rotation = entity.get(Rotation)!;
+    camera.position.set(position.x, position.y, position.z);
+    camera.rotation.set(rotation.x, rotation.y, rotation.z);
+    camera.updateMatrixWorld();
+    camera.updateProjectionMatrix();
+    const release = bindView(camera);
+    set({ camera });
 
-      return () => {
-        cameraRef.current = null;
-        release?.();
-        if (get().camera === camera) set({ camera: previousCamera });
-      };
-    },
-    [entity, get, set, bindView]
-  );
+    return () => {
+      cameraRef.current = null;
+      release?.();
+      if (get().camera === camera) set({ camera: previousCamera });
+    };
+  };
 
   useLayoutEffect(() => {
     const camera = cameraRef.current;

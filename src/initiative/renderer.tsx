@@ -1,3 +1,4 @@
+import { useResource } from '../view/hooks.js';
 import {
   createInitiativePortalNodes,
   createInitiativePortal,
@@ -9,7 +10,14 @@ import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import { createPortal, useFrame, useLoader, useTexture, useThree } from '@react-three/fiber/webgpu';
+import {
+  useMutableCallback,
+  createPortal,
+  useFrame,
+  useLoader,
+  useTexture,
+  useThree,
+} from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
 import { clamp } from 'math';
 import { type ComponentRef, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
@@ -22,6 +30,7 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   SRGBColorSpace,
+  type WebGPURenderer,
 } from 'three/webgpu';
 import { ActiveScreen, Screen, ScreenTransition, Timeline } from '../timeline/traits.js';
 import { Camera } from '../camera/traits.js';
@@ -35,7 +44,7 @@ import {
 import { fonts, ramp } from '../theme.js';
 import { withMeshopt } from '../view/utils/load-gltf.js';
 import { createInitiativeSky } from './utils/sky.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { warmUp } from '../view/utils/warm-up.js';
 import { BenchmarkRenderer } from './benchmark/renderer.js';
 import { createInitiativeMedia } from './media.js';
@@ -51,6 +60,41 @@ export function InitiativeRenderer() {
   // one unit in radius, so the preview camera pushes straight in along z
   const gltf = useLoader(GLTFLoader, './meshes/magic_portal/scene.glb', withMeshopt);
   const stars = useTexture('./sky/hyg-stars.png');
+  const [owned] = useResource(
+    () => {
+      const resources = createInitiativeScene();
+      const portal = createInitiativePortal(gltf.scene, resources);
+      const glade = createInitiativeGlade(portal, resources.environmentReveal);
+      glade.grass.material.lightsNode = resources.foregroundLighting;
+      glade.grass.castShadow = true;
+      glade.grass.receiveShadow = true;
+      const sky = createInitiativeSky(stars, glade.phase);
+      return { resources, portal, glade, sky };
+    },
+    ({ resources, portal, glade, sky }) => {
+      sky.dispose();
+      disposeInitiativeGlade(glade);
+      portal.traverse((object) => {
+        if (object instanceof Mesh) (object.material as MeshStandardMaterial).dispose();
+      });
+      disposeInitiativeScene(resources);
+    },
+    [gltf, stars]
+  );
+  return owned ? <InitiativeView {...owned} /> : null;
+}
+
+function InitiativeView({
+  resources,
+  portal,
+  glade,
+  sky,
+}: {
+  resources: ReturnType<typeof createInitiativeScene>;
+  portal: ReturnType<typeof createInitiativePortal>;
+  glade: ReturnType<typeof createInitiativeGlade>;
+  sky: ReturnType<typeof createInitiativeSky>;
+}) {
   const world = useWorld();
   const { data } = useActiveScreen();
   const falling = !!data?.initiativePortalVisible;
@@ -92,16 +136,15 @@ export function InitiativeRenderer() {
   const mesh = useRef<Mesh>(null);
   const lens = useRef<{ camera: PerspectiveCamera; fov: number } | null>(null);
   const arrival = useRef({ inside: false, startedAt: 0 });
-  const resources = useMemo(() => createInitiativeScene(), []);
+  const mutableRef = useMutableCallback({ resources, glade, cover: initiativeCover });
   useLayoutEffect(() => {
+    const { resources } = mutableRef.current;
     // The glade renders at the drawing buffer size so the composite samples it one to one
     resources.target.setSize(Math.round(size.width * dpr), Math.round(size.height * dpr));
     // The preview camera is independent of the presentation camera
-    // oxlint-disable-next-line react/immutability
     resources.camera.aspect = size.width / size.height;
     resources.camera.updateProjectionMatrix();
-  }, [resources, size.width, size.height, dpr]);
-  useEffect(() => () => disposeInitiativeScene(resources), [resources]);
+  }, [resources, mutableRef, size.width, size.height, dpr]);
   const mediaRef = useRef<ReturnType<typeof createInitiativeMedia> | null>(null);
   // Media resources live on commit so their video frame callbacks survive remounts
   useEffect(() => {
@@ -126,41 +169,21 @@ export function InitiativeRenderer() {
     },
     []
   );
-  const portal = useMemo(() => createInitiativePortal(gltf.scene, resources), [gltf, resources]);
-  const glade = useMemo(() => {
-    const glade = createInitiativeGlade(portal, resources.environmentReveal);
-    glade.grass.material.lightsNode = resources.foregroundLighting;
-    glade.grass.castShadow = true;
-    glade.grass.receiveShadow = true;
-    return glade;
-  }, [portal, resources]);
-  const sky = useMemo(() => createInitiativeSky(stars, glade.phase), [stars, glade]);
-  useEffect(() => () => sky.dispose(), [sky]);
   const skyNode = useMemo(
     () => sky.node.mul(vec4(resources.skyReveal, resources.skyReveal, resources.skyReveal, 1)),
     [sky, resources]
   );
   useLayoutEffect(() => {
-    /* oxlint-disable react/immutability */
+    const { resources } = mutableRef.current;
     resources.scene.backgroundNode = skyNode;
     resources.scene.add(portal, glade.group);
     // The frozen shadow maps must include the stones and the grass
     resources.lamp.shadow.needsUpdate = true;
     resources.moon.shadow.needsUpdate = true;
-    /* oxlint-enable react/immutability */
     return () => {
       resources.scene.remove(portal, glade.group);
     };
-  }, [resources, portal, glade, skyNode]);
-  useEffect(() => () => disposeInitiativeGlade(glade), [glade]);
-  useEffect(
-    () => () => {
-      portal.traverse((object) => {
-        if (object instanceof Mesh) (object.material as MeshStandardMaterial).dispose();
-      });
-    },
-    [portal]
-  );
+  }, [resources, mutableRef, portal, glade, skyNode]);
   // Build both pipelines during the title screen so the fall never stalls on a first draw
   useEffect(() => {
     void warmUp(renderer, resources.scene, resources.camera, undefined, resources.target);
@@ -169,6 +192,8 @@ export function InitiativeRenderer() {
   const nodes = useMemo(() => createInitiativePortalNodes(resources, opacity), [resources, opacity]);
 
   useFrame((state, delta) => {
+    const { resources, glade, cover } = mutableRef.current;
+    const { renderer } = state;
     const media = mediaRef.current;
     if (!mesh.current || !media) return;
     const timeline = world.queryFirst(Timeline);
@@ -188,8 +213,7 @@ export function InitiativeRenderer() {
     }
     mesh.current.visible = fallingNow || insideNow || opacity.value > 0;
     // The preview is opaque across the whole frame once the glade is reached and faded in
-    // oxlint-disable-next-line react/immutability
-    initiativeCover.value = insideNow && !fallingNow && opacity.value >= 1 ? 1 : 0;
+    cover.value = insideNow && !fallingNow && opacity.value >= 1 ? 1 : 0;
     const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0);
     const arrivalElapsed = world.get(Time)!.elapsed - arrival.current.startedAt;
     const conjure = insideNow ? portalConjureMotion(arrivalElapsed) : null;
@@ -202,8 +226,6 @@ export function InitiativeRenderer() {
     // The preview camera rests just outside the ring so the stones frame the opening
     let dolly = 4.4;
     let snap = false;
-    // TSL uniforms and the preview camera carry mutable render state outside React
-    /* oxlint-disable react/immutability */
     glade.phase.value = world.get(Time)!.elapsed;
     if (fallingNow) {
       const motion = portalFallMotion(
@@ -212,7 +234,8 @@ export function InitiativeRenderer() {
         screen!.get(ScreenTransition)!.cameraDelay
       );
       const camera = state.camera as PerspectiveCamera;
-      lens.current ??= { camera, fov: world.queryFirst(Camera)?.get(Camera)?.fov ?? camera.fov };
+      if (lens.current === null)
+        lens.current = { camera, fov: world.queryFirst(Camera)?.get(Camera)?.fov ?? camera.fov };
       camera.fov = lens.current.fov + motion.fov;
       camera.rotation.z += motion.bank;
       camera.updateProjectionMatrix();
@@ -274,7 +297,6 @@ export function InitiativeRenderer() {
     // Keep the fog behind the stone ring as the preview camera approaches from far away
     (resources.scene.fog as Fog).near = position.z + 0.1;
     (resources.scene.fog as Fog).far = position.z + 9.6;
-    /* oxlint-enable react/immutability */
     resources.camera.updateMatrixWorld();
     if (profileRef.current) {
       profileRef.current.position.y = Math.sin(glade.phase.value * 1.3) * 0.1 * labelOpacity.value;
@@ -318,20 +340,7 @@ export function InitiativeRenderer() {
         });
       }
     }
-    const target = renderer.getRenderTarget();
-    const autoClear = renderer.autoClear;
-    const alpha = renderer.getClearAlpha();
-    renderer.getClearColor(resources.clearColor);
-    try {
-      sky.render(renderer, resources.camera, resources.target.width, resources.target.height);
-      renderer.setRenderTarget(resources.target);
-      renderer.autoClear = true;
-      renderer.render(resources.scene, resources.camera);
-    } finally {
-      renderer.setRenderTarget(target);
-      renderer.setClearColor(resources.clearColor, alpha);
-      renderer.autoClear = autoClear;
-    }
+    renderInitiative(renderer, resources, sky);
   });
 
   return (
@@ -455,4 +464,25 @@ export function InitiativeRenderer() {
       )}
     </>
   );
+}
+
+function renderInitiative(
+  renderer: WebGPURenderer,
+  resources: ReturnType<typeof createInitiativeScene>,
+  sky: ReturnType<typeof createInitiativeSky>
+) {
+  const target = renderer.getRenderTarget();
+  const autoClear = renderer.autoClear;
+  const alpha = renderer.getClearAlpha();
+  renderer.getClearColor(resources.clearColor);
+  try {
+    sky.render(renderer, resources.camera, resources.target.width, resources.target.height);
+    renderer.setRenderTarget(resources.target);
+    renderer.autoClear = true;
+    renderer.render(resources.scene, resources.camera);
+  } finally {
+    renderer.setRenderTarget(target);
+    renderer.setClearColor(resources.clearColor, alpha);
+    renderer.autoClear = autoClear;
+  }
 }

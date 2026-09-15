@@ -99,8 +99,7 @@ function hypnoticSpiral(strength: Node<'float'>, spin: Node<'float'>, spread: No
   const point = uv().sub(0.5).mul(2);
   const radius = point.length();
   const wave = atan(point.y, point.x).mul(2).sub(radius.mul(13)).add(spin).sin().mul(0.5).add(0.5);
-  // A narrow threshold keeps the arms as fine as the old falloff but with a defined edge,
-  // and the threshold widens as an arm winds away so its tail dissolves instead of stopping
+  // The threshold widens toward the tail so the spiral fades gradually
   const half = smoothstep(0.22, 0.8, radius).mul(0.28).add(0.04);
   const bands = smoothstep(half.negate().add(0.84), half.add(0.84), wave);
   // The arms unwind out of the pupil: their outer edge starts inside the eye and travels out

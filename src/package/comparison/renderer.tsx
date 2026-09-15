@@ -5,12 +5,12 @@ import { extend, useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
 import { easing } from 'math/time';
-import { useLayoutEffect, useRef, useMemo } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { type Group, Shape, SRGBColorSpace } from 'three/webgpu';
 import { codeExamples } from './data.js';
 import { Timeline } from '../../timeline/traits.js';
 import { fonts, ramp } from '../../theme.js';
-import { MeltMaterial as MeltMaterialImpl } from '../../view/melt-material.js';
+import { MeltMaterial as MeltMaterialImpl } from './melt-material.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 
 const MeltMaterial = extend(MeltMaterialImpl);
@@ -144,18 +144,15 @@ export function CodeComparisonRenderer() {
 }
 
 function CodeArrow() {
-  const shape = useMemo(() => {
-    const shape = new Shape();
-    shape.moveTo(-0.16, -0.045);
-    shape.lineTo(0, -0.045);
-    shape.lineTo(0, -0.13);
-    shape.lineTo(0.17, 0);
-    shape.lineTo(0, 0.13);
-    shape.lineTo(0, 0.045);
-    shape.lineTo(-0.16, 0.045);
-    shape.closePath();
-    return shape;
-  }, []);
+  const shape = new Shape();
+  shape.moveTo(-0.16, -0.045);
+  shape.lineTo(0, -0.045);
+  shape.lineTo(0, -0.13);
+  shape.lineTo(0.17, 0);
+  shape.lineTo(0, 0.13);
+  shape.lineTo(0, 0.045);
+  shape.lineTo(-0.16, 0.045);
+  shape.closePath();
 
   return (
     <mesh rotation={[-0.2, -0.3, 0]} position={[0, 0, -0.05]}>
@@ -187,20 +184,18 @@ function CodePanel({ example }: { example: (typeof codeExamples)[number] }) {
   const font = useMSDF(fonts.mono);
   const texture = useTexture(`./code/${example.id}.png`);
   const chipWidth = example.label.length * 0.32 * 0.62 + 0.24;
-  const shape = useMemo(() => {
-    const shape = new Shape();
-    shape.moveTo(-2.76, -1.85);
-    shape.lineTo(2.76, -1.85);
-    shape.quadraticCurveTo(3, -1.85, 3, -1.61);
-    shape.lineTo(3, 1.61);
-    shape.quadraticCurveTo(3, 1.85, 2.76, 1.85);
-    shape.lineTo(-2.76, 1.85);
-    shape.quadraticCurveTo(-3, 1.85, -3, 1.61);
-    shape.lineTo(-3, -1.61);
-    shape.quadraticCurveTo(-3, -1.85, -2.76, -1.85);
-    shape.closePath();
-    return shape;
-  }, []);
+
+  const shape = new Shape();
+  shape.moveTo(-2.76, -1.85);
+  shape.lineTo(2.76, -1.85);
+  shape.quadraticCurveTo(3, -1.85, 3, -1.61);
+  shape.lineTo(3, 1.61);
+  shape.quadraticCurveTo(3, 1.85, 2.76, 1.85);
+  shape.lineTo(-2.76, 1.85);
+  shape.quadraticCurveTo(-3, 1.85, -3, 1.61);
+  shape.lineTo(-3, -1.61);
+  shape.quadraticCurveTo(-3, -1.85, -2.76, -1.85);
+  shape.closePath();
 
   return (
     <>

@@ -1,11 +1,13 @@
+import { useResource } from './view/hooks.js';
+import type { Entity } from 'koota';
 import { useActiveScreen } from './timeline/hooks.js';
 import { createPortal, useFrame, useThree, type ThreeCamera } from '@react-three/fiber/webgpu';
 import { useTrait } from 'koota/react';
 import { easing } from 'math/time';
-import { Suspense, useCallback, useLayoutEffect, useMemo } from 'react';
+import { Suspense, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { color, mix, pass, screenUV, uniform, vec4 } from 'three/tsl';
-import { NodeUpdateType, RenderPipeline, Scene, type Group } from 'three/webgpu';
+import { NodeUpdateType, RenderPipeline, Scene, type Group, type WebGPURenderer } from 'three/webgpu';
 import { ScreenTransition } from './timeline/traits.js';
 import { ramp } from './theme.js';
 import { CharterRenderer } from './charter/renderer.js';
@@ -13,7 +15,7 @@ import { AnnouncementRenderer } from './charter/announcement.js';
 import { GreetingRenderer } from './introduction/greeting.js';
 import { HistoryRenderer } from './introduction/history.js';
 import { PrinciplesRenderer } from './charter/principles/renderer.js';
-import { useTransitionOpacity } from './view/use-transition-opacity.js';
+import { useTransitionOpacity } from './transition/use-transition-opacity.js';
 import { warmUp } from './view/utils/warm-up.js';
 
 /** Composite foreground screens over the scene, with a soft focus for the greeting. */
@@ -38,76 +40,49 @@ export function Foreground() {
     ease: greeting || history ? easing.cubicOut : easing.cubicInOut,
   });
   const foreground = useMemo(() => new Scene(), []);
-  const effect = useMemo(() => {
-    const scenePass = pass(scene, camera);
-    const foregroundPass = pass(foreground, camera);
-    const radius = uniform(0);
-    // Explicit screen coordinates prevent the background sphere from supplying its own UVs.
-    const sceneTexture = scenePass.getTextureNode().sample(screenUV);
-    const blurred = gaussianBlur(sceneTexture, radius, 8);
-    const background = mix(
-      mix(sceneTexture, blurred, amount),
-      vec4(color(ramp['light-25']), 1),
-      amount.mul(0.1)
-    );
-    const overlay = foregroundPass.getTextureNode();
-    // Render targets contain premultiplied color, so composite before the output transform.
-    const pipeline = new RenderPipeline(
-      renderer,
-      vec4(
-        background.rgb.mul(overlay.a.oneMinus()).add(overlay.rgb),
-        overlay.a.add(background.a.mul(overlay.a.oneMinus()))
-      )
-    );
-    return {
-      scenePass,
-      foregroundPass,
-      background,
-      radius,
-      blurred,
-      pipeline,
-      warmed: false,
-      preparedScreen: undefined as typeof screen,
-      width: 0,
-      height: 0,
-      pixelRatio: 0,
-      pendingGreeting: null as Group | null,
-      count: -1,
-      stable: 0,
-      warmedCount: -1,
-    };
-  }, [renderer, scene, foreground, camera, amount]);
-
-  // These objects are owned by this compositor and updated before rendering.
-  /* oxlint-disable react/immutability */
-  useLayoutEffect(() => {
-    const previousBackground = foreground.backgroundNode;
-    // Viewport lens and warp samples must contain the live sky beneath the foreground.
-    foreground.backgroundNode = effect.background;
-    return () => {
-      foreground.backgroundNode = previousBackground;
+  const foregroundRef = useRef(foreground);
+  const [resource, effectRef] = useResource(
+    () => {
+      const foreground = foregroundRef.current;
+      const effect = createForegroundEffect(renderer, scene, foreground, camera, amount);
+      const previousBackground = foreground.backgroundNode;
+      foreground.backgroundNode = effect.background;
+      return { ...effect, foreground, previousBackground };
+    },
+    (effect) => {
+      effect.foreground.backgroundNode = effect.previousBackground;
       effect.pipeline.dispose();
       effect.blurred.dispose();
       effect.scenePass.dispose();
       effect.foregroundPass.dispose();
-    };
-  }, [effect, foreground]);
+    },
+    [renderer, scene, foregroundRef, camera, amount]
+  );
 
   const prepareGreeting = useCallback(
     (group: Group) => {
-      effect.pendingGreeting = group;
+      if (effectRef.current) effectRef.current.pendingGreeting = group;
     },
-    [effect]
+    [effectRef]
   );
 
   useFrame(
     ({ size }) => {
+      const effect = effectRef.current;
+      // Wait for the resource's view tree to commit before warming its pipelines.
+      if (!effect || effect !== resource) {
+        renderer.render(scene, camera);
+        return;
+      }
+      const foreground = effect.foreground;
       const pixelRatio = renderer.getPixelRatio();
       // Foreground renderers mount as their assets resolve, so compile the foreground pass
       // again whenever its object count settles. The pass targets exist after the first render.
       if (effect.warmed) {
         let count = 0;
-        foreground.traverse(() => count++);
+        foreground.traverse(() => {
+          count += 1;
+        });
         if (count !== effect.count) {
           effect.count = count;
           effect.stable = 0;
@@ -140,23 +115,7 @@ export function Foreground() {
         foreground.environment = scene.environment;
         foreground.environmentIntensity = scene.environmentIntensity;
         effect.radius.value = (amount.value || 1) * pixelRatio * 2;
-        const restore: (() => void)[] = [];
-        if (effect.pendingGreeting && !greeting) {
-          effect.pendingGreeting.traverse((child) => {
-            const { visible, frustumCulled } = child;
-            child.visible = true;
-            child.frustumCulled = false;
-            restore.push(() => {
-              child.visible = visible;
-              child.frustumCulled = frustumCulled;
-            });
-          });
-        }
-        try {
-          effect.pipeline.render();
-        } finally {
-          for (const undo of restore) undo();
-        }
+        renderForeground(effect, greeting);
         effect.warmed = true;
         effect.preparedScreen = screen;
         effect.width = size.width;
@@ -169,7 +128,8 @@ export function Foreground() {
     },
     { phase: 'render' }
   );
-  /* oxlint-enable react/immutability */
+
+  if (!resource) return null;
 
   return createPortal(
     <>
@@ -199,4 +159,70 @@ function ForegroundCamera({ camera }: { camera: ThreeCamera }) {
     set({ camera });
   }, [camera, set]);
   return null;
+}
+
+function createForegroundEffect(
+  renderer: WebGPURenderer,
+  scene: Scene,
+  foreground: Scene,
+  camera: ThreeCamera,
+  amount: ReturnType<typeof useTransitionOpacity>
+) {
+  const scenePass = pass(scene, camera);
+  const foregroundPass = pass(foreground, camera);
+  const radius = uniform(0);
+  // Explicit screen coordinates prevent the background sphere from supplying its own UVs.
+  const sceneTexture = scenePass.getTextureNode().sample(screenUV);
+  const blurred = gaussianBlur(sceneTexture, radius, 8);
+  const background = mix(
+    mix(sceneTexture, blurred, amount),
+    vec4(color(ramp['light-25']), 1),
+    amount.mul(0.1)
+  );
+  const overlay = foregroundPass.getTextureNode();
+  // Render targets contain premultiplied color, so composite before the output transform.
+  const pipeline = new RenderPipeline(
+    renderer,
+    vec4(
+      background.rgb.mul(overlay.a.oneMinus()).add(overlay.rgb),
+      overlay.a.add(background.a.mul(overlay.a.oneMinus()))
+    )
+  );
+  return {
+    scenePass,
+    foregroundPass,
+    background,
+    radius,
+    blurred,
+    pipeline,
+    warmed: false,
+    preparedScreen: undefined as Entity | undefined,
+    width: 0,
+    height: 0,
+    pixelRatio: 0,
+    pendingGreeting: null as Group | null,
+    count: -1,
+    stable: 0,
+    warmedCount: -1,
+  };
+}
+
+function renderForeground(effect: ReturnType<typeof createForegroundEffect>, greeting: boolean) {
+  const restore: (() => void)[] = [];
+  if (effect.pendingGreeting && !greeting) {
+    effect.pendingGreeting.traverse((child) => {
+      const { visible, frustumCulled } = child;
+      child.visible = true;
+      child.frustumCulled = false;
+      restore.push(() => {
+        child.visible = visible;
+        child.frustumCulled = frustumCulled;
+      });
+    });
+  }
+  try {
+    effect.pipeline.render();
+  } finally {
+    for (const undo of restore) undo();
+  }
 }

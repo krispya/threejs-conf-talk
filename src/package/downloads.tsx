@@ -2,12 +2,11 @@ import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import { useTrait } from 'koota/react';
-import { useMemo } from 'react';
 import type { Group, MeshBasicNodeMaterial } from 'three/webgpu';
 import { DownloadParts, Package, type GlyphLabel } from './traits.js';
 import { fonts } from '../theme.js';
 import { downloadsLabel } from './utils/sizing.js';
-import { EXCLUDE_FROM_BACKDROP } from '../view/glass/transmission-backdrop.js';
+import { EXCLUDE_FROM_BACKDROP } from '../glass/transmission-backdrop.js';
 import { useTraitBinding } from '../view/hooks.js';
 
 /** Count the same download snapshot that determines the sphere's area. */
@@ -16,14 +15,11 @@ export function PackageDownloads({ entity }: { entity: Entity }) {
   const font = useMSDF(fonts.mono);
   const width = downloadsLabel(downloads).length * 0.32 * 0.62 + 0.24;
   // animateDownloadCounters raises, counts, and settles the ticker through these parts
-  const parts = useMemo(
-    () => ({
-      group: null as Group | null,
-      number: null as GlyphLabel | null,
-      backdrop: null as MeshBasicNodeMaterial | null,
-    }),
-    []
-  );
+  const parts = {
+    group: null as Group | null,
+    number: null as GlyphLabel | null,
+    backdrop: null as MeshBasicNodeMaterial | null,
+  };
   const bind = useTraitBinding(entity, DownloadParts, parts);
 
   return (

@@ -1,14 +1,14 @@
 import { Time } from '../time/traits.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import { useFrame, useTexture } from '@react-three/fiber/webgpu';
+import { useMutableCallback, useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useWorld } from 'koota/react';
 import { type ComponentRef, useLayoutEffect, useRef, useMemo } from 'react';
 import { uniform } from 'three/tsl';
 import { SRGBColorSpace, type Group } from 'three/webgpu';
 import { allProfiles, type ProfileLogin } from '../profile/data.js';
 import { brand, fonts, ramp } from '../theme.js';
-import type { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import type { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 
 export function InitiativeFeatureChip({
   children,
@@ -31,18 +31,19 @@ export function InitiativeFeatureChip({
   const text = useRef<ComponentRef<typeof Text>>(null);
   const entrance = useRef(0);
   const opacity = useMemo(() => uniform(0), []);
+  const opacityRef = useMutableCallback(opacity);
   // Chips keep their meshes and shaders between screens, so a new label restarts the entrance
   useLayoutEffect(() => {
     entrance.current = 0;
   }, [children, profile]);
 
   useFrame((_, delta) => {
+    const opacity = opacityRef.current;
     if (!group.current || !text.current) return;
     entrance.current += Math.min(delta, 1 / 30);
     const progress = Math.min(1, Math.max(0, (entrance.current - 0.35 - index * 0.18) / 0.55));
     const reveal = 1 - (1 - progress) ** 3;
     // Shader opacity follows each chip's staggered entrance and the shared label fade
-    // oxlint-disable-next-line react/immutability
     opacity.value = reveal * visibility.value;
     const elapsed = world.get(Time)!.elapsed;
     group.current.visible = opacity.value > 0;

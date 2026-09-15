@@ -23,7 +23,7 @@ import type { Material } from 'three/webgpu';
 import { getTransitionProgress } from '../timeline/timing.js';
 import { ActiveScreen, Timeline, Screen, ScreenTransition } from '../timeline/traits.js';
 import { random } from 'math/random';
-import { arrivalSpring } from '../view/utils/spring.js';
+import { arrivalSpring } from '../transition/utils/spring.js';
 import { placeMaintainerPortrait } from './utils/maintainer-layout.js';
 import { downloadsLabel, packageLabelSize } from './utils/sizing.js';
 

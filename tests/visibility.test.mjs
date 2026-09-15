@@ -3,18 +3,41 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createWorld } from 'koota';
 import { WorldProvider } from 'koota/react';
-import { createElement, useState } from 'react';
+import { act, createElement, StrictMode, useState } from 'react';
+import { transformSync } from '@babel/core';
+import compiler from 'babel-plugin-react-compiler';
+import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
 let server;
 let sim;
 let useEntityVisible;
+let useEntityPresent;
 
 before(async () => {
-  server = await createServer({ server: { middlewareMode: true, ws: false }, appType: 'custom' });
+  server = await createServer({
+    server: { middlewareMode: true, ws: false },
+    appType: 'custom',
+    plugins: [
+      {
+        name: 'compile-visibility-hooks',
+        enforce: 'pre',
+        transform(code, id) {
+          if (!id.endsWith('/src/view/hooks.ts')) return;
+          return transformSync(code, {
+            filename: id,
+            configFile: false,
+            babelrc: false,
+            parserOpts: { plugins: ['typescript', 'jsx'] },
+            plugins: [[compiler, { target: '19', panicThreshold: 'all_errors' }]],
+          }).code;
+        },
+      },
+    ],
+  });
   sim = await loadPresentation(server);
-  ({ useEntityVisible } = await server.ssrLoadModule('/src/view/hooks.ts'));
+  ({ useEntityVisible, useEntityPresent } = await server.ssrLoadModule('/src/view/hooks.ts'));
 });
 
 after(async () => {
@@ -74,5 +97,63 @@ void test('late asset mounts and return visits initialize from the active screen
         `${screen}: ${name}`
       );
     }
+  }
+});
+
+function MountedAppearance({ entity }) {
+  const visible = useEntityVisible(entity);
+  const present = useEntityPresent(entity);
+  return createElement('output', { 'data-visible': visible, 'data-present': present });
+}
+
+void test('compiled package views show, retain their exit, and reappear without remounting', async (t) => {
+  const dom = new Window();
+  const previous = {
+    window: globalThis.window,
+    document: globalThis.document,
+    act: globalThis.IS_REACT_ACT_ENVIRONMENT,
+  };
+  globalThis.window = dom;
+  globalThis.document = dom.document;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const { createRoot } = await import('react-dom/client');
+  const { world, entities, timeline } = createScene(t);
+  const host = dom.document.createElement('div');
+  const root = createRoot(host);
+  const appearance = () => [host.firstChild.dataset.visible, host.firstChild.dataset.present];
+  try {
+    await act(async () =>
+      root.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(
+            WorldProvider,
+            { world },
+            createElement(MountedAppearance, { entity: entities.fiber })
+          )
+        )
+      )
+    );
+    const mounted = host.firstChild;
+    assert.deepEqual(appearance(), ['false', 'false']);
+    await act(async () => timeline.goTo('intro'));
+    assert.deepEqual(appearance(), ['true', 'true']);
+    await act(async () => timeline.goTo('letters'));
+    assert.deepEqual(appearance(), ['false', 'true'], 'The view stays present while exiting');
+    await act(async () => {
+      sim.systems.updateTime(world, 10, 10);
+      sim.systems.animatePackages(world);
+    });
+    assert.deepEqual(appearance(), ['false', 'false']);
+    await act(async () => timeline.goTo('intro'));
+    assert.deepEqual(appearance(), ['true', 'true']);
+    assert.equal(host.firstChild, mounted);
+  } finally {
+    await act(async () => root.unmount());
+    dom.close();
+    globalThis.window = previous.window;
+    globalThis.document = previous.document;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = previous.act;
   }
 });

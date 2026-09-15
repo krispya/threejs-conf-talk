@@ -1,7 +1,7 @@
 import type { World } from 'koota';
 import type { Camera, Scene, WebGPURenderer } from 'three/webgpu';
-import { Time } from '../../time/traits.js';
-import { Backdrop } from '../traits.js';
+import { Time } from '../time/traits.js';
+import { Backdrop } from './traits.js';
 import { captureTransmissionBackdrop } from './transmission-backdrop.js';
 
 /** Capture the finished frame behind every active glass material, once per frame. */

@@ -4,20 +4,29 @@ import { backdropNode, glow } from './utils/gradient.js';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { useFrame, useLoader, useThree } from '@react-three/fiber/webgpu';
 import { useLayoutEffect, useMemo, useRef } from 'react';
-import { Fn, If, color, mix, vec4 } from 'three/tsl';
+import { Fn, If, color, mix, vec4, uniform } from 'three/tsl';
 import { backdrop, brand } from '../theme.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
-import { useShowreel } from './showreel/use-showreel.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
+import { useResource, useSpawnedParts } from '../view/hooks.js';
+import { Showreel } from './traits.js';
+import { createShowreelMotion } from './showreel/motion.js';
+import { createShowreelSource, disposeShowreel, mountShowreel } from './showreel/source.js';
 import { starfieldNode } from './utils/starfield.js';
 import { initiativeCover } from '../initiative/utils/portal.js';
 import { usePortal, usePortalRipples } from '../title/use-portal.js';
-import { useTransmissionBackdrop } from '../view/glass/transmission-backdrop-provider.js';
+import { useTransmissionBackdrop } from '../glass/transmission-backdrop-provider.js';
 import { warmUp } from '../view/utils/warm-up.js';
 
 useLoader.preload(EXRLoader, './sky/nebula.exr');
 
 export function Background() {
+  const reel = useShowreel();
+  return reel ? <BackgroundView reel={reel} /> : null;
+}
+
+function BackgroundView({ reel }: { reel: NonNullable<ReturnType<typeof useShowreel>> }) {
   const nebula = useLoader(EXRLoader, './sky/nebula.exr');
+  const get = useThree((state) => state.get);
   const scene = useThree((state) => state.scene);
   const renderer = useThree((state) => state.renderer);
   const camera = useThree((state) => state.camera);
@@ -32,7 +41,6 @@ export function Background() {
   const closing = data?.background === 'blue';
   const opacity = useTransitionOpacity(data?.backgroundVisible ?? true);
   const stars = useTransitionOpacity(data?.background === 'stars', { delayed: true });
-  const reel = useShowreel();
 
   const background = useMemo(
     () =>
@@ -109,23 +117,22 @@ export function Background() {
     variants[data?.warpVisible ? 'warp' : closing ? 'closing' : solid ? 'solid' : 'pastel'];
   const warmed = useRef<typeof variants | null>(null);
   useFrame((state, delta) => {
+    const { scene } = state;
     // The backdrop's own copy of the opening follows the same clock as the title's
     portalOpening.step(state, delta);
     if (warmed.current === variants || !renderer.hasInitialized()) return;
     warmed.current = variants;
     const probe = new Group();
     for (const variant of Object.values(variants)) {
-      /* oxlint-disable react/immutability */
       scene.backgroundNode = variant;
       void warmUp(renderer, probe, camera, scene);
       void warmUp(renderer, probe, camera, scene, capture.cleanTarget);
     }
     scene.backgroundNode = composed;
-    /* oxlint-enable react/immutability */
   });
 
-  /* oxlint-disable react/immutability */
   useLayoutEffect(() => {
+    const { scene, renderer } = get();
     const prevToneMapping = renderer.toneMapping;
     const prevBackground = scene.background;
     const prevBackgroundNode = scene.backgroundNode;
@@ -137,8 +144,27 @@ export function Background() {
       scene.backgroundNode = prevBackgroundNode;
       renderer.toneMapping = prevToneMapping;
     };
-  }, [scene, renderer, composed]);
-  /* oxlint-enable react/immutability */
+  }, [get, scene, renderer, composed]);
 
   return null;
+}
+
+/** Own the video wall's media and uniforms. `composeShowreel` steps and renders them each frame. */
+function useShowreel() {
+  const [reel] = useResource(
+    () => {
+      const source = createShowreelSource();
+      mountShowreel(source);
+      return {
+        source,
+        motion: createShowreelMotion(),
+        opacity: uniform(0),
+        blackout: uniform(0),
+      };
+    },
+    (reel) => disposeShowreel(reel.source),
+    []
+  );
+  useSpawnedParts(Showreel, reel);
+  return reel;
 }

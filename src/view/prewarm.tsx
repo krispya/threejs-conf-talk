@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useRef } from 'react';
-import { useTransmissionBackdrop } from './glass/transmission-backdrop-provider.js';
+import { useTransmissionBackdrop } from '../glass/transmission-backdrop-provider.js';
 import { warmUp } from './utils/warm-up.js';
 
 /**
@@ -14,7 +14,9 @@ export function Prewarm() {
   useFrame(({ renderer, scene, camera }) => {
     if (!renderer.hasInitialized()) return;
     let count = 0;
-    scene.traverse(() => count++);
+    scene.traverse(() => {
+      count += 1;
+    });
     const pending = state.current;
     if (count !== pending.count) {
       pending.count = count;

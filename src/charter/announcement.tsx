@@ -2,12 +2,12 @@ import { useActiveScreen } from '../timeline/hooks.js';
 import { useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { lerp } from 'math';
 import { easing } from 'math/time';
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { color, normalView, smoothstep } from 'three/tsl';
 import { SRGBColorSpace, type Group } from 'three/webgpu';
 import { PreviousScreen, Screen } from '../timeline/traits.js';
 import type { FrameStep } from '../view/hooks.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { DocumentCollapse } from './document-collapse.js';
 
 useTexture.preload('./announcements/charter-post.svg');
@@ -29,13 +29,13 @@ export function AnnouncementRenderer() {
   });
   const source = image.image as HTMLImageElement;
   const height = (24 * source.height) / source.width;
-  const opacity = useMemo(() => smoothstep(0, 0.12, progress), [progress]);
-  const shadow = useMemo(() => opacity.mul(0.2), [opacity]);
-  const gold = useMemo(() => color('#d7bb81').mul(normalView.z.abs().mul(0.32).add(0.68)), []);
+  const opacity = smoothstep(0, 0.12, progress);
+  const shadow = opacity.mul(0.2);
+  const gold = color('#d7bb81').mul(normalView.z.abs().mul(0.32).add(0.68));
   const root = useRef<Group>(null);
   const sheet = useRef<Group>(null);
   // The collapse captures the placed sheet, so it steps after the frame is positioned
-  const steps = useMemo(() => new Set<FrameStep>(), []);
+  const steps = new Set<FrameStep>();
 
   useFrame((state, delta) => {
     if (root.current && sheet.current) {

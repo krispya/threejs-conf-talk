@@ -1,20 +1,20 @@
+import { useResource, useViewBinding, useEntityVisible, type FrameStep } from '../view/hooks.js';
 import { Position } from '../traits.js';
 import { useQuery, useTrait } from 'koota/react';
 import { Title } from './traits.js';
 import { createTitleGeometry } from './utils/geometry.js';
 import { createTitleFragmentNodes, createTitleWireNodes } from './utils/materials.js';
-import { useViewBinding, useEntityVisible, type FrameStep } from '../view/hooks.js';
 import { Ref } from '../view/traits.js';
 import { useFrame, useLoader } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { lerp } from 'math';
 import { easing } from 'math/time';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { color, float, positionLocal, smoothstep, uv, vec4 } from 'three/tsl';
 import { DoubleSide, Vector3, type Group, type Mesh } from 'three/webgpu';
 import { brand, fonts } from '../theme.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { useTitleFlight } from './use-flight.js';
 import { useTitleGlitch } from './use-glitch.js';
 import { usePortal } from './use-portal.js';
@@ -39,7 +39,7 @@ function TitleView({ entity }: { entity: Entity }) {
   const portal = usePortal();
   const glitch = useTitleGlitch();
   // Child views register their steps here and run after the flight, portal, and glitch clocks
-  const steps = useMemo(() => new Set<FrameStep>(), []);
+  const steps = new Set<FrameStep>();
   const flightOpacity = useTransitionOpacity(visible && !robotVisible, {
     duration: warpVisible || !visible ? 0.28 : undefined,
   });
@@ -53,60 +53,44 @@ function TitleView({ entity }: { entity: Entity }) {
   const scrimMesh = useRef<Mesh>(null);
   const lettering = useRef<Group>(null);
   const approach = useRef({ visible: false, time: 0 });
-  const horizon = useMemo(() => new Vector3(0, 0, -300), []);
-  const wireMaterial = useMemo(
-    () => createTitleWireNodes(speed, letterOpacity, portal.outside),
-    [letterOpacity, portal.outside, speed]
-  );
-  const fragmentMaterial = useMemo(
-    () => createTitleFragmentNodes(speed, letterOpacity, portal.outside),
-    [speed, letterOpacity, portal.outside]
-  );
-  // Nodes built during render are new objects every time, and a new node rebuilds its shader
-  const faces = useMemo(
-    () => ({
-      steadyMask: portal.mask.and(glitch.mask.not()),
-      glitchMask: portal.mask.and(glitch.mask),
-      echoOpacity: wireMaterial.faceOpacity.mul(0.5),
-      signalOpacity: wireMaterial.faceOpacity.mul(glitch.signal),
-    }),
-    [portal.mask, glitch, wireMaterial]
-  );
-  const scrimMaterial = useMemo(
-    () => ({
-      color: color(brand.green).mul(
-        smoothstep(0.35, 1.35, uv().sub(0.5).mul(2).length()).mul(-0.85).add(1)
-      ),
-      vertex: vec4(positionLocal.xy, 0, 1),
-      depth: float(1),
-      opacity: scrim.mul(opacity).mul(0.54),
-    }),
-    [scrim, opacity]
-  );
-  const lines = useMemo(() => createTitleGeometry(font, text), [font, text]);
-
-  useEffect(
-    () => () =>
-      lines.forEach(({ face, wire, fragments }) => {
+  const horizon = new Vector3(0, 0, -300);
+  const wireMaterial = createTitleWireNodes(speed, letterOpacity, portal.outside);
+  const fragmentMaterial = createTitleFragmentNodes(speed, letterOpacity, portal.outside);
+  const faces = {
+    steadyMask: portal.mask.and(glitch.mask.not()),
+    glitchMask: portal.mask.and(glitch.mask),
+    echoOpacity: wireMaterial.faceOpacity.mul(0.5),
+    signalOpacity: wireMaterial.faceOpacity.mul(glitch.signal),
+  };
+  const scrimMaterial = {
+    color: color(brand.green).mul(
+      smoothstep(0.35, 1.35, uv().sub(0.5).mul(2).length()).mul(-0.85).add(1)
+    ),
+    vertex: vec4(positionLocal.xy, 0, 1),
+    depth: float(1),
+    opacity: scrim.mul(opacity).mul(0.54),
+  };
+  const [lines] = useResource(
+    () => createTitleGeometry(font, text),
+    (lines) => {
+      for (const { face, wire, fragments } of lines) {
         face.dispose();
         wire.dispose();
         fragments.dispose();
-      }),
-    [lines]
+      }
+    },
+    [font, text]
   );
   const bindView = useViewBinding(entity);
-  const handleInit = useCallback(
-    (group: Group | null) => {
-      if (!group) return;
-      const position = entity.get(Position)!;
-      group.position.set(position.x, position.y, position.z);
-      const release = bindView(group);
-      return () => {
-        release?.();
-      };
-    },
-    [entity, bindView]
-  );
+  const handleInit = (group: Group | null) => {
+    if (!group) return;
+    const position = entity.get(Position)!;
+    group.position.set(position.x, position.y, position.z);
+    const release = bindView(group);
+    return () => {
+      release?.();
+    };
+  };
 
   // One callback orders the title's clocks, its lettering, and the child steps within a frame
   useFrame((state, delta) => {
@@ -137,6 +121,8 @@ function TitleView({ entity }: { entity: Entity }) {
     }
     for (const step of steps) step(state, delta);
   });
+
+  if (!lines) return null;
 
   return (
     <group ref={handleInit} name="talk-title" visible={false}>

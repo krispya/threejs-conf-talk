@@ -4,7 +4,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { color, mix, normalLocal, positionWorld, smoothstep } from 'three/tsl';
 import { Euler, Matrix4, Vector3, type InstancedMesh } from 'three/webgpu';
 import { useFrameStep, type FrameStep } from '../view/hooks.js';
-import type { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import type { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import type { useTitleFlight } from './use-flight.js';
 import type { usePortal } from './use-portal.js';
 
@@ -76,7 +76,7 @@ export function TitleObjects({
       if (!restart) emissionStart.current = null;
       return;
     }
-    emissionStart.current ??= flight.current.time;
+    if (emissionStart.current === null) emissionStart.current = flight.current.time;
     // Keep the tumble slow even when forward travel accelerates
     rotationTime.current += delta;
     transform.origin.setZ(depth);

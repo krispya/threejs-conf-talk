@@ -1,7 +1,13 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
 import { Text, TextGroup } from '@pmndrs/glyph/react';
 import { useMSDF } from '@pmndrs/glyph/react/msdf';
-import { useFrame, useLoader, useThree, type ThreeCamera } from '@react-three/fiber/webgpu';
+import {
+  useMutableCallback,
+  useFrame,
+  useLoader,
+  useThree,
+  type ThreeCamera,
+} from '@react-three/fiber/webgpu';
 import { useTrait } from 'koota/react';
 import { easing } from 'math/time';
 import { useEffect, useMemo, useRef, useLayoutEffect } from 'react';
@@ -11,7 +17,7 @@ import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { principles } from './data.js';
 import { PreviousScreen, Screen, ScreenTransition } from '../../timeline/traits.js';
 import { brand, fonts } from '../../theme.js';
-import { useTransitionOpacity } from '../../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../../transition/use-transition-opacity.js';
 import { warmUp } from '../../view/utils/warm-up.js';
 import { PrincipleShardsRenderer, type PrincipleWord } from './shards-renderer.js';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
@@ -49,7 +55,7 @@ export function PrinciplesRenderer({
     { duration: 2.2, ease: easing.cubicInOut }
   );
   const lift = useTransitionOpacity(tasteful || logo, { duration: 1.05, ease: easing.cubicInOut });
-  const center = useMemo(() => uniform(new Vector3()), []);
+  const center = uniform(new Vector3());
   // The list sits lifted while the words come apart, so their outlines carry that offset
   const words = useRef<PrincipleWord[]>([
     ...principles.map(({ id, title }, index) => ({
@@ -65,7 +71,8 @@ export function PrinciplesRenderer({
   const list = useRef<Group>(null);
   const renderer = useThree((state) => state.renderer);
   const scene = useThree((state) => state.scene);
-  const target = useMemo(() => new Vector3(), []);
+  const target = new Vector3();
+
   const curtain = useMemo(() => {
     const top = uv().y.oneMinus();
     // The center pulls ahead with momentum, then the hem straightens as it lands.
@@ -191,11 +198,10 @@ function PrincipleLine({
     clock: still ? 'frames' : 'timeline',
   });
   const drop = useMemo(() => uniform(1), []);
+  const dropRef = useMutableCallback(drop);
   useLayoutEffect(() => {
-    // TSL uniforms carry mutable render state outside React
-    // oxlint-disable-next-line react/immutability
-    drop.value = still ? 0 : 1;
-  }, [still, drop]);
+    dropRef.current.value = still ? 0 : 1;
+  }, [still, dropRef]);
   const material = useMemo(
     () =>
       defineTextMaterial((context) => {

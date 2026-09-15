@@ -12,7 +12,7 @@ import { Anchor } from '../floating/traits.js';
 import { useTexture, useThree } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { easing } from 'math/time';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { color, mix, texture as textureNode, uniform } from 'three/tsl';
 import {
   SRGBColorSpace,
@@ -22,7 +22,7 @@ import {
 } from 'three/webgpu';
 import { allProfiles } from './data.js';
 import { ramp } from '../theme.js';
-import { useTransitionOpacity } from '../view/use-transition-opacity.js';
+import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { ProfileAura } from './aura.js';
 
 export function ProfileRenderer() {
@@ -56,12 +56,11 @@ function ProfileView({ entity, storyProfile }: { entity: Entity; storyProfile: s
     if (renderer.hasInitialized()) renderer.initTexture(texture);
   }, [renderer, texture]);
   // Receded portraits sink toward the backdrop so the portraits in front stay the bright ones
-  const dim = useMemo(() => uniform(0), []);
-  const portraitColor = useMemo(() => {
-    const image = textureNode(texture);
-    // Transparent avatar pixels belong to the portrait's white backing, not the video wall.
-    return mix(mix(color('#ffffff'), image.rgb, image.a), color('#141726'), dim);
-  }, [texture, dim]);
+  const dim = uniform(0);
+
+  const image = textureNode(texture);
+  // Transparent avatar pixels belong to the portrait's white backing, not the video wall.
+  const portraitColor = mix(mix(color('#ffffff'), image.rgb, image.a), color('#141726'), dim);
   const featured = storyProfile === login;
   const visible = useEntityVisible(entity);
   const present = useEntityPresent(entity);
@@ -71,29 +70,23 @@ function ProfileView({ entity, storyProfile }: { entity: Entity; storyProfile: s
     delay: storytelling ? 0.3 : 0,
     ease: easing.cubicInOut,
   });
-  const parts = useMemo(
-    () => ({
-      portrait: null as MeshBasicNodeMaterial | null,
-      border: null as MeshBasicMaterial | null,
-      dim,
-      aura: null as Group | null,
-      auraReveal,
-    }),
-    [dim, auraReveal]
-  );
+  const parts = {
+    portrait: null as MeshBasicNodeMaterial | null,
+    border: null as MeshBasicMaterial | null,
+    dim,
+    aura: null as Group | null,
+    auraReveal,
+  };
   const bind = useTraitBinding(entity, ProfileParts, parts);
 
   const bindView = useViewBinding(entity);
-  const handleInit = useCallback(
-    (group: Group | null) => {
-      if (!group) return;
-      const anchor = entity.get(Anchor)!;
-      group.position.set(anchor.x, anchor.y, anchor.z);
-      group.scale.setScalar(Math.max(0.001, entity.get(ProfilePresence)?.value ?? 0));
-      return bindView(group);
-    },
-    [entity, bindView]
-  );
+  const handleInit = (group: Group | null) => {
+    if (!group) return;
+    const anchor = entity.get(Anchor)!;
+    group.position.set(anchor.x, anchor.y, anchor.z);
+    group.scale.setScalar(Math.max(0.001, entity.get(ProfilePresence)?.value ?? 0));
+    return bindView(group);
+  };
 
   return (
     <group ref={handleInit} name={login} visible={present}>

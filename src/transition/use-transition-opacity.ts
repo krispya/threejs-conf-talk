@@ -1,12 +1,12 @@
+import { useMutableCallback } from '@react-three/fiber/webgpu';
 import type { Entity } from 'koota';
 import { useActions, useQueryFirst, useTrait } from 'koota/react';
 import { easing } from 'math/time';
 import { useLayoutEffect, useRef, useMemo } from 'react';
 import { uniform } from 'three/tsl';
 import { Timeline } from '../timeline/traits.js';
-import { transitionActions, type TransitionOptions } from '../transition/actions.js';
-import { Transition } from '../transition/traits.js';
-import { viewActions } from './actions.js';
+import { transitionActions, type TransitionOptions } from './actions.js';
+import { Transition } from './traits.js';
 
 /**
  * Configure a world transition on discrete changes and hand its uniform to the world.
@@ -27,10 +27,11 @@ export function useTransitionOpacity(
 ) {
   const timeline = useQueryFirst(Timeline);
   const timing = useTrait(timeline, Timeline);
-  const { createTransition, setTransition, destroyTransition } = useActions(transitionActions);
-  const { attachUniform } = useActions(viewActions);
+  const { createTransition, setTransition, destroyTransition, attachUniform } =
+    useActions(transitionActions);
   const transition = useRef<Entity | undefined>(undefined);
   const opacity = useMemo(() => uniform(0), []);
+  const opacityRef = useMutableCallback(opacity);
 
   useLayoutEffect(
     () => () => {
@@ -41,10 +42,10 @@ export function useTransitionOpacity(
   );
 
   useLayoutEffect(() => {
-    const entity = (transition.current ??= createTransition(visible && ready ? 1 : 0, {
-      ready,
-      restartKey,
-    }));
+    if (!transition.current) {
+      transition.current = createTransition(visible && ready ? 1 : 0, { ready, restartKey });
+    }
+    const entity = transition.current;
     attachUniform(entity, opacity);
     setTransition(entity, Number(visible), {
       restartOnChange,
@@ -57,8 +58,7 @@ export function useTransitionOpacity(
       clock,
     });
     // Reset readiness and restart values before the next draw.
-    // oxlint-disable-next-line react/immutability
-    opacity.value = entity.get(Transition)!.value;
+    opacityRef.current.value = entity.get(Transition)!.value;
   }, [
     createTransition,
     setTransition,
@@ -74,6 +74,7 @@ export function useTransitionOpacity(
     ready,
     clock,
     opacity,
+    opacityRef,
   ]);
 
   return opacity;

@@ -1,6 +1,6 @@
 import { atan, color, Fn, mix, positionLocal, smoothstep, time } from 'three/tsl';
 import { MeshPhysicalNodeMaterial } from 'three/webgpu';
-import { spectrum } from '../theme.js';
+import { spectrum } from '../../theme.js';
 
 export class MeltMaterial extends MeshPhysicalNodeMaterial {
   constructor() {
