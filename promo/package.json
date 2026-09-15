@@ -1,0 +1,25 @@
+{
+  "name": "promo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PMNDRS conference promo edit",
+  "type": "module",
+  "scripts": {
+    "dev": "remotion studio --no-open",
+    "render": "remotion render src/index.ts Promo out/pmndrs-promo.mp4 --codec=h264 --crf=16",
+    "typecheck": "tsc --noEmit",
+    "beat": "python3 scripts/make-beat.py"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.524",
+    "@remotion/media": "4.0.524",
+    "@remotion/transitions": "4.0.524",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.524"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "typescript": "^7.0.2"
+  }
+}

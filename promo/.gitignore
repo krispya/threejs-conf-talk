@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+.env
+
+# Rendered previews can be regenerated from the composition.
+out
+
+/public/source.mov
+/public/later-scenes.mov

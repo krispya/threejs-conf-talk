@@ -1,3 +1,7 @@
+packages:
+  - '.'
+  - 'promo'
+
 pmOnFail: download
 
 allowBuilds:

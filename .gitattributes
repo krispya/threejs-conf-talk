@@ -23,3 +23,5 @@
 *.glb binary
 *.gltf binary
 *.bin binary
+promo/public/*.wav filter=lfs diff=lfs merge=lfs -text
+promo/public/*.mp4 filter=lfs diff=lfs merge=lfs -text
