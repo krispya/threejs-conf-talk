@@ -144,8 +144,7 @@ function PackageView({ entity, showMaintainers }: { entity: Entity; showMaintain
             attenuationDistance={0}
             envMapIntensity={0.18}
             samples={4}
-            backside
-            backsideThickness={radius * 2}
+            backside={false}
           />
         </mesh>
         <group
