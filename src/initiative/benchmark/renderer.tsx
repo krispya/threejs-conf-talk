@@ -1,11 +1,10 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useRef } from 'react';
 import type { Group, Node } from 'three/webgpu';
 import { fonts, brand, ramp } from '../../theme.js';
 import { useTransitionOpacity } from '../../transition/use-transition-opacity.js';
-import { Text, TextGroup } from '@pmndrs/glyph/react';
+import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
 import { spiderBenchmarks, threeBridgeBenchmarks } from './data.js';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 

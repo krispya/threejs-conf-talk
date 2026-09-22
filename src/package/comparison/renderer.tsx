@@ -1,6 +1,5 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
 import { Time } from '../../time/traits.js';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import { extend, useFrame, useTexture } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
@@ -11,7 +10,7 @@ import { codeExamples } from './data.js';
 import { Timeline } from '../../timeline/traits.js';
 import { fonts, ramp } from '../../theme.js';
 import { MeltMaterial as MeltMaterialImpl } from './melt-material.js';
-import { Text, TextGroup } from '@pmndrs/glyph/react';
+import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
 
 const MeltMaterial = extend(MeltMaterialImpl);
 

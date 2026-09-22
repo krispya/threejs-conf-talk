@@ -1,5 +1,4 @@
-import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
+import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
 import type { Entity } from 'koota';
 import type { Group, MeshBasicNodeMaterial } from 'three/webgpu';
 import { FeatureParts, type GlyphLabel } from './traits.js';

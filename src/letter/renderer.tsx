@@ -1,7 +1,6 @@
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Position } from '../traits.js';
-import { TextGroup, Text } from '@pmndrs/glyph/react';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
+import { TextGroup, Text, useMsdf } from '@pmndrs/glyph/react';
 import { Text as GlyphText } from '@pmndrs/glyph/three';
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useQuery, useTrait } from 'koota/react';

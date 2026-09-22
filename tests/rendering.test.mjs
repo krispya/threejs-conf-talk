@@ -30,8 +30,7 @@ after(async () => {
 
 void test('the presentation fonts load with the installed Glyph MSDF renderer', async () => {
   const { readFile } = await import('node:fs/promises');
-  const { glyph } = await import('@pmndrs/glyph');
-  const { msdf } = await import('@pmndrs/glyph/raster/msdf');
+  const { glyph, msdf } = await import('@pmndrs/glyph');
   const { fonts } = await server.ssrLoadModule('/src/theme.ts');
   for (const source of [fonts.sans, fonts.sansLight, fonts.mono]) {
     const bytes = await readFile(new URL(`../public/${source}`, import.meta.url));

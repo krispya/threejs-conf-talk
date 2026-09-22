@@ -29,34 +29,34 @@
     "bake:geist-mono": "glyph bake --input public/fonts/GeistMono-Medium.ttf --output public/fonts/geist-mono.font.glb --unicodes U+0020-007E --msdf --slug"
   },
   "dependencies": {
-    "@pmndrs/glyph": "0.0.0-canary-25136f81-20260914",
+    "@pmndrs/glyph": "0.1.0",
     "@react-three/fiber": "10.0.0-alpha.5",
     "koota": "^0.6.6",
-    "math": "0.1.0",
+    "math": "0.0.0-canary-20260920-9969597f",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "three": "~0.185.1"
+    "three": "~0.186.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@resvg/resvg-js": "^2.6.2",
     "@rolldown/plugin-babel": "^0.2.4",
     "@types/babel__core": "^7.20.5",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.6.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
-    "@types/three": "~0.185.4",
+    "@types/three": "~0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
     "babel-plugin-react-compiler": "1.0.0",
     "happy-dom": "^20.14.5",
     "opentype.js": "^2.0.0",
-    "oxlint": "^1.81.0",
-    "oxlint-tsgolint": "^7.0.2001",
-    "prettier": "^3.9.6",
+    "oxlint": "^1.85.0",
+    "oxlint-tsgolint": "^7.0.2002",
+    "prettier": "^3.9.8",
     "qrcode": "1.5.4",
     "shiki": "^4.4.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   },
   "packageManager": "pnpm@11.25.0",
   "engines": {

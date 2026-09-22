@@ -1,7 +1,7 @@
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Size } from '../traits.js';
 import { Time } from '../time/traits.js';
-import { TextGroup, Text } from '@pmndrs/glyph/react';
+import { TextGroup, Text, useMsdf } from '@pmndrs/glyph/react';
 import { useFrame } from '@react-three/fiber/webgpu';
 import { useQuery, useTrait, useWorld } from 'koota/react';
 import { clamp, lerp } from 'math';
@@ -16,7 +16,6 @@ import {
   useEntityPresent,
   useTraitBinding,
 } from '../view/hooks.js';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
 import type { Entity } from 'koota';
 import { packageLabelSize } from './utils/sizing.js';
 import { brand, fonts, spectrum } from '../theme.js';

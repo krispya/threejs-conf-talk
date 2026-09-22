@@ -1,8 +1,7 @@
 import { useResource } from '../view/hooks.js';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
-import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
+import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { useFrame, useLoader, useTexture, type ThreeCamera } from '@react-three/fiber/webgpu';
 import { useTrait, useWorld } from 'koota/react';

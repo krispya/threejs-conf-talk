@@ -1,5 +1,4 @@
-import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
+import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { color, hash, mix, positionLocal, smoothstep, vec2 } from 'three/tsl';
 import type { Node } from 'three/webgpu';

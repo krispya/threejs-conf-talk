@@ -1,6 +1,5 @@
 import { useActiveScreen } from '../../timeline/hooks.js';
-import { Text, TextGroup } from '@pmndrs/glyph/react';
-import { useMsdf } from '@pmndrs/glyph/react/msdf';
+import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
 import {
   useMutableCallback,
   useFrame,
