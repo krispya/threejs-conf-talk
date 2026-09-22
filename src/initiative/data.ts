@@ -16,7 +16,7 @@ export const initiatives = [
     id: 'glyph',
     profile: 'thejustinwalsh',
     title: 'Glyph',
-    installCommand: 'npm i @pmndrs/glyph@canary',
+    installCommand: 'npm i @pmndrs/glyph',
     color: '#dba5ff',
     position: { x: -49, y: -31, z: -60 },
     video: './initiatives/glyph-reel.mp4',
