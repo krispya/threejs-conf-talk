@@ -5,10 +5,12 @@ import { IsHidden, IsPresent, Position, Rotation, Size } from '../traits.js';
 import {
   TransitionOrigin,
   ActiveScreen,
+  PreviousScreen,
   Screen,
   Timeline,
   ScreenTransition,
 } from '../timeline/traits.js';
+import { BlackHoleParts } from '../charter/traits.js';
 import { Time } from '../time/traits.js';
 import { Anchor, Float } from '../floating/traits.js';
 import { Ref } from '../view/traits.js';
@@ -45,7 +47,7 @@ export function animateProfiles(world: World) {
     const group = entity.get(Ref);
     const parts = entity.get(ProfileParts);
     if (group && parts?.portrait && parts.border) {
-      group.scale.setScalar(Math.max(0.001, presence.value * focus.scale));
+      group.scale.setScalar(Math.max(0.001, presence.value * focus.scale * (1 - focus.swallow)));
       // Receding portraits also thin out, letting the wall read through them. The spring
       // settles past its mark, which belongs in the motion rather than the fade.
       const faded = clamp(presence.value, 0, 1) * (1 - focus.recede * 0.45) * focus.wanderOpacity;
@@ -226,6 +228,55 @@ export function wanderProfiles(world: World) {
   });
 }
 
+const hole = new Vector3();
+
+/** Seconds into the announcement's collapse into the black hole, or -1 while it is not collapsing. */
+function collapseElapsed(world: World) {
+  const timeline = world.queryFirst(Timeline);
+  const screen = timeline?.targetFor(ActiveScreen);
+  const collapsing =
+    !!world.queryFirst(BlackHoleParts)?.get(BlackHoleParts)?.hole &&
+    !screen?.get(Screen)?.announcementVisible &&
+    !!screen?.targetFor(PreviousScreen)?.get(Screen)?.announcementVisible;
+  return collapsing ? world.get(Time)!.elapsed - (timeline?.get(Timeline)?.startedAt ?? 0) : -1;
+}
+
+/**
+ * As the black hole takes the announcement, every portrait on screen orbits into it, each setting off at its own
+ * moment and circling faster as it falls and shrinks, until the hole swallows them all at its pop. The pop throws
+ * them back out, still turning, to their places among the stars. The orbit bends the placed position each frame.
+ */
+export function orbitProfiles(world: World) {
+  const t = collapseElapsed(world);
+  const collapsing = t >= 0 && t <= 3.7;
+  if (collapsing) world.queryFirst(BlackHoleParts)!.get(BlackHoleParts)!.hole!.getWorldPosition(hole);
+
+  world.query(Profile, ProfileFocus, Position).updateEach(([profile, focus, position], entity) => {
+    if (!collapsing) {
+      focus.swallow = 0;
+      return;
+    }
+    const start = 0.2 + (profile.index % 9) * 0.1;
+    const falling = t < 2.26;
+    const flung = easing.cubicOut(clamp((t - 2.26) / 1.4, 0, 1));
+    const inside = falling ? easing.cubicIn(clamp((t - start) / (2.2 - start), 0, 1)) : 1 - flung;
+    // Thrown out fast while the camera is still close, they grow back slower than they fly, so none
+    // reads larger than it went in before the flight carries the camera away
+    focus.swallow = falling ? inside : 1 - flung ** 3;
+    if (inside === 0 || entity.has(IsHidden)) return;
+    const dx = position.x - hole.x;
+    const dy = position.y - hole.y;
+    // Thrown out still turning the same way, each spiral finishes on a whole turn so the portrait
+    // lands exactly where it is placed when the orbit lets go
+    const spin = 3 + (profile.index % 4) * 0.5;
+    const turn = falling ? inside * spin : spin + flung * (Math.PI * 2 - spin);
+    const reach = 1 - inside;
+    position.x = hole.x + (dx * Math.cos(turn) - dy * Math.sin(turn)) * reach;
+    position.y = hole.y + (dx * Math.sin(turn) + dy * Math.cos(turn)) * reach;
+    position.z = lerp(position.z, hole.z, inside);
+  });
+}
+
 /** Center the storyteller and arrange nearby portraits in a floating ring at their own depths. */
 export function focusProfiles(world: World) {
   const entity = world.queryFirst(Camera, Position);
@@ -238,11 +289,14 @@ export function focusProfiles(world: World) {
   const teamCamera = camera;
   const elapsed = world.get(Time)!.elapsed - (timeline?.get(Timeline)?.startedAt ?? 0);
   const bounds = world.get(Bounds);
+  // Every portrait is inside the black hole by its pop, so the ring lets go there rather than
+  // holding its size and place to the camera as it flies out
+  const released = collapseElapsed(world) >= 2.2;
   world
     .query(ProfileFocus, Position, Rotation, Anchor, Size)
     .updateEach(([focus, position, rotation, anchor, size], profile) => {
       // Each portrait rides its own staggered spring, so the ring gathers and settles
-      const progress = profileArrival(time, focus.slot, focus.count);
+      const progress = released ? 1 : profileArrival(time, focus.slot, focus.count);
       focus.value = lerp(focus.from, focus.to, progress);
       // The overshoot belongs to the motion, not to how far back a portrait reads
       focus.recede = clamp(lerp(focus.recedeFrom, focus.recedeTo, progress), 0, 1);

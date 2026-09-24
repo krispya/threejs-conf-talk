@@ -56,4 +56,6 @@ export const ProfileFocus = trait({
   wanderFromY: 0,
   wanderOpacity: 1,
   wanderFromOpacity: 1,
+  // How far a black hole has taken the portrait, from 0 untouched to 1 swallowed
+  swallow: 0,
 });

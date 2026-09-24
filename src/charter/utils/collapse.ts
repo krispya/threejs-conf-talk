@@ -5,6 +5,7 @@ import {
   color,
   float,
   hash,
+  instanceIndex,
   mix,
   normalFlat,
   positionLocal,
@@ -79,12 +80,19 @@ export function createCollapseUniforms() {
     presence: uniform(0),
     lens: uniform(0),
     lensCenter: uniform(new Vector2(0.5, 0.5)),
+    // The hole's horizon on screen, as a share of the viewport height
     lensRadius: uniform(0.1),
     shockRadius: uniform(0),
     shockPush: uniform(0),
     ring: uniform(0),
     ringGlow: uniform(0),
+    // A second, faster ring that chases the first, a flash over the whole frame, and seconds since the pop for
+    // its embers, or -1 before it
+    ring2: uniform(0),
+    ring2Glow: uniform(0),
     flash: uniform(0),
+    blast: uniform(0),
+    embers: uniform(-1),
     warp: uniform(0),
   };
 }
@@ -167,44 +175,85 @@ export function createCollapseNodes(
   const halo = radius.sub(0.25).max(0).mul(-7).exp().mul(0.12);
   const glow = u.heat.mul(1.6).add(1);
 
-  // Lens: light near the horizon comes from further out and drags around the spin.
-  // A thin shock ring pushes the image ahead of it after the pop.
-  const aspect = screenSize.x.div(screenSize.y);
-  const offset = screenUV.sub(u.lensCenter).mul(vec2(aspect, 1));
-  const reach = offset.length().max(0.0001);
-  const direction = offset.div(reach);
-  const proximity = reach.div(u.lensRadius);
-  const bend = u.lens.mul(u.lensRadius).div(proximity.mul(proximity).add(0.3));
+  // Lens: light passing the hole is bent toward it by the square of the horizon over its distance, so the frame
+  // around the hole stretches out around it while the far frame holds still. The bend rises from nothing at the
+  // horizon and closes off a few horizons out, dragging round with the spin and splitting a little by colour. A
+  // thin shock ring pushes the image ahead of it after the pop.
+  const aspect = vec2(screenSize.x.div(screenSize.y), 1);
+  const offset = screenUV.sub(u.lensCenter).mul(aspect);
+  const reach = offset.length().max(0.00001);
+  const horizon = u.lensRadius.max(0.00001);
+  const field = smoothstep(horizon.mul(6), horizon.mul(2), reach);
+  const bend = horizon
+    .mul(horizon)
+    .div(reach)
+    .mul(u.lens.mul(1.2))
+    .mul(smoothstep(horizon, horizon.mul(2), reach))
+    .mul(field);
+  const drag = u.lens.mul(1.2).div(reach.div(horizon).pow(2).add(0.5)).mul(field);
+  const heading = atan(offset.y, offset.x).add(drag);
   const shock = u.shockPush.mul(reach.sub(u.shockRadius).pow(2).mul(-900).exp());
-  const drag = u.lens.mul(1.2).div(proximity.mul(proximity).add(0.5));
-  const warped = vec2(
-    direction.x.mul(drag.cos()).sub(direction.y.mul(drag.sin())),
-    direction.x.mul(drag.sin()).add(direction.y.mul(drag.cos()))
-  );
-  const sample = (dispersion: number) =>
-    viewportSharedTexture(
-      u.lensCenter.add(warped.mul(reach.add(bend.mul(dispersion)).add(shock)).div(vec2(aspect, 1)))
+  const bent = (dispersion: number) =>
+    u.lensCenter.add(
+      vec2(heading.cos(), heading.sin())
+        .mul(reach.sub(bend.mul(dispersion)).add(shock))
+        .div(aspect)
     );
+  // Each viewport node copies the framebuffer and breaks the render pass, so one copy feeds every tap
+  const lensFrame = viewportSharedTexture(bent(1));
 
   // Warp: the frame streaks radially from the vanishing point. Keeping the brightest tap
   // along each streak turns the stars into trails, with a cold shift as speed peaks.
   const fromCenter = screenUV.sub(0.5);
   const dither = hash(screenCoordinate.x.add(screenCoordinate.y.mul(4096)).toInt());
   const taps = 20;
-  let smooth: N = vec3(0);
-  let streak: N = vec3(0);
-  for (let i = 0; i < taps; i++) {
-    const along = float((i - taps / 2) / taps)
-      .add(dither.div(taps))
-      .mul(u.warp);
-    const tap = viewportSharedTexture(screenUV.sub(fromCenter.mul(along))).rgb;
+  const streakAt = (i: number) =>
+    screenUV.sub(
+      fromCenter.mul(
+        float((i - taps / 2) / taps)
+          .add(dither.div(taps))
+          .mul(u.warp)
+      )
+    );
+  const warpFrame = viewportSharedTexture(streakAt(0));
+  let smooth: N = warpFrame.rgb;
+  let streak: N = warpFrame.rgb;
+  for (let i = 1; i < taps; i++) {
+    const tap = texture(warpFrame.value, streakAt(i)).rgb;
     smooth = smooth.add(tap);
     streak = streak.max(tap);
   }
   const trails = mix(smooth.div(taps), streak, u.warp.mul(2.5).clamp().mul(0.6));
 
   const wave = point.length().sub(u.ring).pow(2).mul(-1400).exp().mul(u.ringGlow);
+  const chase = point.length().sub(u.ring2).pow(2).mul(-2600).exp().mul(u.ring2Glow);
   const burst = point.length().pow(2).mul(-14).exp().mul(u.flash);
+
+  // The pop whites out the frame and fades through the disk's violet away from the hole
+  const blast = mix(
+    color('#fff5dc'),
+    color('#b6adff'),
+    screenUV.sub(u.lensCenter).mul(aspect).length().mul(1.4).clamp()
+  );
+
+  // Embers flung out of the pop, each on its own heading, speed, and life, stretched along their flight by their
+  // speed and slowed by drag, cooling from white hot through orange to violet as they die
+  const course = hash(instanceIndex).mul(Math.PI * 2);
+  const speed = hash(instanceIndex.add(1)).mul(28).add(10);
+  const life = hash(instanceIndex.add(2)).mul(1.1).add(0.5);
+  const spark = hash(instanceIndex.add(3)).mul(0.5).add(0.25);
+  const age = u.embers.max(0);
+  const cooled = age.div(life).clamp();
+  const slowing = age.mul(-2.4).exp();
+  const along = vec2(course.cos(), course.sin());
+  const across = vec2(along.y.negate(), along.x);
+  const quad = positionLocal.xy
+    .mul(vec2(speed.mul(slowing).mul(0.06).add(1), 1))
+    .mul(spark.mul(float(1).sub(cooled)).max(0.001));
+  const flung = along
+    .mul(speed.mul(float(1).sub(slowing)).div(2.4))
+    .add(along.mul(quad.x))
+    .add(across.mul(quad.y));
 
   return {
     warpVertex: vec4(positionLocal.xy.mul(2), 0, 1),
@@ -221,10 +270,30 @@ export function createCollapseNodes(
     glow: smoothstep(0.2, 0.24, radius)
       .mul(float(1).sub(smoothstep(0.7, 1, radius)))
       .mul(u.presence),
-    lensColor: vec3(sample(1).r, sample(1.1).g, sample(1.2).b),
-    lensOpacity: smoothstep(0, 0.004, bend.add(shock.abs())),
-    shock: color('#fff1dc').mul(wave).add(color('#ffd9b0').mul(burst)),
-    shockOpacity: wave.add(burst).clamp(),
+    lensColor: vec3(
+      lensFrame.r,
+      texture(lensFrame.value, bent(1.1)).g,
+      texture(lensFrame.value, bent(1.2)).b
+    ),
+    lensOpacity: smoothstep(0, 0.002, bend.add(drag).add(shock.abs())),
+    shock: color('#fff1dc')
+      .mul(wave)
+      .add(color('#ffd9b0').mul(burst))
+      .add(color('#b6adff').mul(chase)),
+    shockOpacity: wave.add(burst).add(chase).clamp(),
+    blastColor: blast,
+    blastOpacity: u.blast,
+    emberPosition: vec3(flung, 0),
+    emberColor: mix(
+      mix(color('#fff5dc'), color('#ffa36a'), cooled.mul(2).clamp()),
+      color('#b6adff'),
+      cooled.mul(2).sub(1).clamp()
+    ),
+    emberOpacity: float(1)
+      .sub(cooled)
+      .pow(1.5)
+      .mul(float(1).sub(smoothstep(0.2, 1, uv().sub(0.5).mul(2).length())))
+      .mul(u.embers.greaterThanEqual(0).select(float(1), float(0))),
     warpColor: trails.mul(mix(vec3(1), vec3(0.9, 0.97, 1.2), u.warp.mul(4).clamp())),
     warpOpacity: u.warp.mul(25).clamp(),
   };

@@ -1,4 +1,6 @@
-import { useResource, useFrameStep, type FrameStep } from '../view/hooks.js';
+import { useResource, useFrameStep, useSpawnedParts, type FrameStep } from '../view/hooks.js';
+import { BlackHoleParts } from './traits.js';
+import { FlightRumble, type FlightSound } from './flight-rumble.js';
 import {
   createCollapseUniforms,
   createCollapseNodes,
@@ -15,6 +17,7 @@ import {
   AdditiveBlending,
   DoubleSide,
   type Group,
+  type InstancedMesh,
   type Mesh,
   type PerspectiveCamera,
   type WebGPURenderer,
@@ -73,12 +76,18 @@ function DocumentCollapseView({
   const group = useRef<Group>(null);
   const paperMesh = useRef<Mesh>(null);
   const hole = useRef<Group>(null);
+  // The portraits orbit into the hole, so its place is shared with the profile systems
+  const parts = useMemo(() => ({ hole: null as Group | null }), []);
+  const bindHole = useSpawnedParts(BlackHoleParts, parts)('hole');
   const remnant = useRef<Group>(null);
   const warpMesh = useRef<Mesh>(null);
+  const blastMesh = useRef<Mesh>(null);
+  const embers = useRef<InstancedMesh>(null);
   const captured = useRef(false);
   const baseFov = useRef(0);
   const u = useMemo(() => createCollapseUniforms(), []);
   const mutableRef = useMutableCallback({ resources, u });
+  const flight = useRef<FlightSound>({ speed: 0, kick: 0, jolt: 0, hit: -1 });
 
   useEffect(() => {
     captured.current = false;
@@ -99,6 +108,8 @@ function DocumentCollapseView({
   useFrameStep(steps, (state, delta) => {
     const { resources, u } = mutableRef.current;
     const { renderer } = state;
+    // The flight's sound falls silent on any frame that does not reach the flight
+    flight.current.speed = flight.current.kick = flight.current.jolt = 0;
     const view = group.current;
     const paper = sheet.current;
     if (!view || !paper) return;
@@ -161,7 +172,9 @@ function DocumentCollapseView({
     resources.previous.copy(camera.position);
     const warp = Math.min(1, speed / 300);
     u.warp.value = 0.26 * warp;
-    camera.fov = baseFov.current + 22 * warp;
+    flight.current.speed = warp;
+    // The pop punches the lens out, and it snaps back as the flight begins
+    camera.fov = baseFov.current + 22 * warp + (t >= 2.26 ? 14 * Math.exp(-(t - 2.26) * 6) : 0);
     camera.updateProjectionMatrix();
     if (warpMesh.current) warpMesh.current.visible = warp > 0.01;
     if (remnant.current) remnant.current.visible = t < 3.1;
@@ -210,6 +223,13 @@ function DocumentCollapseView({
     u.flash.value = popped ? 1 - easing.cubicOut(ramp(t, 2.26, 2.5)) : 0;
     u.ring.value = easing.cubicOut(shock) * 0.9;
     u.ringGlow.value = popped ? (1 - shock) ** 2 : 0;
+    // A violet ring chases the first, the whole frame whites out, and embers fly
+    u.ring2.value = easing.cubicOut(ramp(t, 2.3, 2.9)) * 1.3;
+    u.ring2Glow.value = t >= 2.3 ? (1 - ramp(t, 2.3, 2.9)) ** 2 : 0;
+    u.blast.value = popped ? 0.85 * (1 - easing.cubicOut(ramp(t, 2.26, 2.62))) : 0;
+    u.embers.value = popped ? t - 2.26 : -1;
+    if (blastMesh.current) blastMesh.current.visible = u.blast.value > 0.001;
+    if (embers.current) embers.current.visible = popped && t < 4;
 
     // The camera rumbles as the pull builds, kicks when the hole pops, then keeps a steady
     // rumble for the whole flight that surges with the warp speed and lets go on arrival
@@ -228,6 +248,9 @@ function DocumentCollapseView({
           0.5 *
           (1 - ramp(t, duration - 0.15, duration))
         : 0;
+    flight.current.kick = kick / 0.45;
+    flight.current.jolt = jolt / 0.5;
+    flight.current.hit = hit;
     camera.position.y += jolt * Math.sin((beat - hit) * 28) * (hit % 2 ? 1 : -1);
     camera.rotation.z += jolt * 0.02 * Math.cos((beat - hit) * 22);
     const amplitude = rumble + kick + cruise;
@@ -246,14 +269,16 @@ function DocumentCollapseView({
       point.project(camera);
       const perUnit = Math.abs(edge.y - point.y) * 0.5;
       u.lensCenter.value.set(point.x * 0.5 + 0.5, 0.5 - point.y * 0.5);
-      u.lensRadius.value = Math.max(0.001, 1.8 * size * perUnit);
+      // The core is drawn out to 0.22 of the hole plane's half size of 9
+      u.lensRadius.value = Math.max(0.001, 1.98 * size * perUnit);
       u.shockRadius.value = 35 * u.ring.value * perUnit;
-      u.shockPush.value = popped ? 0.05 * (1 - shock) ** 2 : 0;
+      u.shockPush.value = popped ? 0.1 * (1 - shock) ** 2 : 0;
     }
   });
 
   return (
     <group ref={group} name="announcement-collapse" visible={false}>
+      <FlightRumble flight={flight} steps={steps} />
       <mesh ref={warpMesh} name="announcement-warp" renderOrder={20} frustumCulled={false}>
         <planeGeometry args={[1, 1]} />
         <meshBasicNodeMaterial
@@ -264,6 +289,25 @@ function DocumentCollapseView({
           depthTest={false}
           depthWrite={false}
           toneMapped={false}
+        />
+      </mesh>
+      <mesh
+        ref={blastMesh}
+        name="announcement-blast"
+        renderOrder={21}
+        frustumCulled={false}
+        visible={false}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshBasicNodeMaterial
+          vertexNode={nodes.warpVertex}
+          colorNode={nodes.blastColor}
+          opacityNode={nodes.blastOpacity}
+          transparent
+          depthTest={false}
+          depthWrite={false}
+          toneMapped={false}
+          blending={AdditiveBlending}
         />
       </mesh>
       <group ref={remnant} name="announcement-remnant">
@@ -302,7 +346,14 @@ function DocumentCollapseView({
             toneMapped={false}
           />
         </mesh>
-        <group ref={hole} name="announcement-black-hole" position={[0, 0, 7]}>
+        <group
+          ref={(group) => {
+            hole.current = group;
+            bindHole(group);
+          }}
+          name="announcement-black-hole"
+          position={[0, 0, 7]}
+        >
           <mesh renderOrder={8}>
             <planeGeometry args={[18, 18]} />
             <meshBasicNodeMaterial
@@ -325,6 +376,28 @@ function DocumentCollapseView({
             />
           </mesh>
         </group>
+        <instancedMesh
+          ref={embers}
+          name="announcement-black-hole-embers"
+          args={[undefined, undefined, 160]}
+          position={[0, 0, 7.3]}
+          renderOrder={11}
+          frustumCulled={false}
+          visible={false}
+          userData={{ [EXCLUDE_FROM_BACKDROP]: true }}
+        >
+          <planeGeometry args={[1, 1]} />
+          <meshBasicNodeMaterial
+            positionNode={nodes.emberPosition}
+            colorNode={nodes.emberColor}
+            opacityNode={nodes.emberOpacity}
+            transparent
+            depthTest={false}
+            depthWrite={false}
+            toneMapped={false}
+            blending={AdditiveBlending}
+          />
+        </instancedMesh>
         <mesh name="announcement-black-hole-shock" position={[0, 0, 7.2]} renderOrder={10}>
           <planeGeometry args={[70, 70]} />
           <meshBasicNodeMaterial

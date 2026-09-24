@@ -8,6 +8,7 @@ import {
   layoutTeamConnections,
   placeProfiles,
   focusProfiles,
+  orbitProfiles,
   wanderProfiles,
 } from './profile/systems.js';
 import { updateTime } from './time/systems.js';
@@ -48,6 +49,7 @@ export function FrameLoop() {
       floatBodies(world);
       focusProfiles(world);
       wanderProfiles(world);
+      orbitProfiles(world);
       syncTransforms(world);
       animateProfiles(world);
       // Package attachments follow the sphere placed by syncTransforms and animatePackages
