@@ -3,7 +3,7 @@ import { mulberry32 } from 'math/random';
 import type { Font } from 'three/addons/loaders/FontLoader.js';
 import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BufferGeometry, Float32BufferAttribute, Shape, ShapeGeometry, Vector3 } from 'three/webgpu';
+import { BufferGeometry, Float32BufferAttribute, ShapeGeometry, Vector3 } from 'three/webgpu';
 
 /**
  * The Poimandres mark traced from logo.svg in github.com/pmndrs/branding. Each box is
@@ -16,20 +16,6 @@ export const logoBoxes = [
   [0.35, 0.7, 0.7, 1],
   [0.7, 0.35, 1, 1],
 ] as const;
-
-/** The mark as solid geometry, `size` units across and centered on the origin. */
-export function createLogoGeometry(size: number) {
-  return new ShapeGeometry(
-    logoBoxes.map(([left, bottom, right, top]) =>
-      new Shape()
-        .moveTo((left - 0.5) * size, (bottom - 0.5) * size)
-        .lineTo((right - 0.5) * size, (bottom - 0.5) * size)
-        .lineTo((right - 0.5) * size, (top - 0.5) * size)
-        .lineTo((left - 0.5) * size, (top - 0.5) * size)
-        .closePath()
-    )
-  );
-}
 
 /**
  * Solid outlines for a laid out word. The text engine reports each glyph's ink box, and the
@@ -62,27 +48,44 @@ export function createWordGeometry(
     );
     glyphs.push(geometry);
   }
-  return glyphs.length ? mergeGeometries(glyphs) : null;
+  const outline = glyphs.length ? mergeGeometries(glyphs) : null;
+  for (const glyph of glyphs) glyph.dispose();
+  return outline;
 }
 
+/** The ink bounds of a word in list order, used to overlap its breakup with the next word. */
+export type WordBounds = { left: number; right: number; bottom: number; top: number };
+
 /**
- * Break the words into little pieces that each fly to a spot on the mark. The outlines are cut
- * into fine triangles, and each triangle joins the nearest of a jittered grid of seeds, so the
- * pieces tear along irregular edges about `spacing` across. Every vertex carries its piece's
- * center, landing, drift, swell, and timing, so the shader can move each piece as one rigid body.
- * Landings are spread evenly over a mark `size` units across, and the swell scales each piece
- * up to a generous share of that area so the settled pieces melt together and cover the mark.
- * Pieces and landings are both ordered left to right, so neighbours travel together and the
- * mark forms as a sweep. Each impulse blows rightward with lift, like a gust from the left.
+ * Cut letter outlines into irregular scraps. Word starts stagger from top to bottom while
+ * each word releases its pieces over a longer interval, so neighbouring words overlap.
+ * Shuffled destinations distribute early arrivals across the whole mark.
  */
-export function createShardGeometry(words: BufferGeometry, size: number, spacing = 0.16, seed = 7) {
+export function createShardGeometry(
+  words: BufferGeometry,
+  size: number,
+  {
+    spacing = 0.48,
+    seed = 7,
+    lines = [],
+  }: {
+    spacing?: number;
+    seed?: number;
+    lines?: readonly WordBounds[];
+  } = {}
+) {
   const random = mulberry32.create(seed);
   const next = () => mulberry32.sample(random);
-  const fine = new TessellateModifier(spacing * 0.45, 8).modify(words.toNonIndexed());
+  const outline = words.index ? words.toNonIndexed() : words;
+  const fine = new TessellateModifier(spacing * 0.45, 8).modify(outline);
+  if (outline !== words) outline.dispose();
   const position = fine.getAttribute('position');
   const triangles = position.count / 3;
   const shards = new BufferGeometry();
-  if (triangles === 0) return shards;
+  if (triangles === 0) {
+    fine.dispose();
+    return shards;
+  }
 
   fine.computeBoundingBox();
   const { min, max } = fine.boundingBox!;
@@ -161,31 +164,36 @@ export function createShardGeometry(words: BufferGeometry, size: number, spacing
     centerY[piece]! /= total;
   }
 
-  // Pair pieces with landings in left to right order
-  const pieceOrder = new Uint32Array(pieces);
-  for (let piece = 0; piece < pieces; piece++) pieceOrder[piece] = piece;
-  pieceOrder.sort((a, b) => centerX[a]! - centerX[b]!);
   const landings = spreadOverLogo(pieces, size, next);
-  const landingOrder = sortByX(landings, pieces);
   const share = (logoArea() * size * size) / pieces;
   const landing = new Float32Array(pieces * 3);
   const cloud = new Float32Array(pieces * 3);
   const timing = new Float32Array(pieces * 4);
-  for (let rank = 0; rank < pieces; rank++) {
-    const piece = pieceOrder[rank]!;
-    const target = landingOrder[rank]! * 3;
+  for (let piece = 0; piece < pieces; piece++) {
+    const target = piece * 3;
     landing[piece * 3] = landings[target]!;
     landing[piece * 3 + 1] = landings[target + 1]!;
     landing[piece * 3 + 2] = 0;
-    cloud[piece * 3] = 2 + next() * 5;
-    cloud[piece * 3 + 1] = 1.5 + next() * 5;
-    // Grow each piece to about three times its share so neighbours overlap without gaps
+    cloud[piece * 3] = 0.08 + next() * 0.2;
+    cloud[piece * 3 + 1] = 0.12 + next() * 0.3;
+    // Overlap enough ink to reveal the blocks while retaining seams between scraps
     cloud[piece * 3 + 2] = Math.min(
-      6,
-      Math.max(1, Math.sqrt((3 * share) / (weight[piece]! || share)))
+      3.5,
+      Math.max(0.8, Math.sqrt((2.8 * share) / (weight[piece]! || share)))
     );
-    timing[piece * 4] = (rank / pieces) * 0.6 + next() * 0.4;
-    timing[piece * 4 + 1] = (rank / pieces) * 0.5 + next() * 0.5;
+    const row = lines.findIndex(
+      (line) => centerY[piece]! >= line.bottom && centerY[piece]! <= line.top
+    );
+    const line = lines[row];
+    const across =
+      (centerX[piece]! - (line?.left ?? min.x)) /
+      Math.max(spacing, (line?.right ?? max.x) - (line?.left ?? min.x));
+    timing[piece * 4] =
+      0.045 +
+      (Math.max(0, row) / Math.max(1, lines.length - 1)) * 0.26 +
+      across * 0.23 +
+      next() * 0.035;
+    timing[piece * 4 + 1] = 0.35 + next() * 0.07;
     timing[piece * 4 + 2] = next();
     timing[piece * 4 + 3] = next();
   }
@@ -211,6 +219,7 @@ export function createShardGeometry(words: BufferGeometry, size: number, spacing
   shards.setAttribute('cloud', new Float32BufferAttribute(vertexCloud, 3));
   shards.setAttribute('timing', new Float32BufferAttribute(vertexTiming, 4));
   shards.userData.pieces = pieces;
+  fine.dispose();
   return shards;
 }
 
@@ -236,8 +245,8 @@ function spreadOverLogo(count: number, size: number, random: () => number) {
     for (let row = 0; row < rows; row++) {
       for (let column = 0; column < columns; column++) {
         candidates.push(
-          (left - 0.5) * size + ((column + random()) / columns) * width,
-          (bottom - 0.5) * size + ((row + random()) / rows) * height
+          (left - 0.5) * size + ((column + 0.2 + random() * 0.6) / columns) * width,
+          (bottom - 0.5) * size + ((row + 0.2 + random() * 0.6) / rows) * height
         );
       }
     }
@@ -270,10 +279,4 @@ function spreadOverLogo(count: number, size: number, random: () => number) {
     points[index * 3 + 1] = candidates[index * 2 + 1]!;
   }
   return points;
-}
-
-function sortByX(points: Float32Array, count: number) {
-  const order = new Uint32Array(count);
-  for (let index = 0; index < count; index++) order[index] = index;
-  return order.sort((a, b) => points[a * 3]! - points[b * 3]!);
 }

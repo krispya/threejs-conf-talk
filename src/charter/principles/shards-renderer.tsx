@@ -1,7 +1,7 @@
 import { useResource } from '../../view/hooks.js';
 import type { GlyphLayoutInspection, TextCommitState } from '@pmndrs/glyph/three';
 import { useFrame, useThree, type ThreeCamera } from '@react-three/fiber/webgpu';
-import { useQueryFirst, useTarget, useTrait } from 'koota/react';
+import { useQueryFirst, useTarget, useTrait, useWorld } from 'koota/react';
 import { useRef, type RefObject } from 'react';
 import {
   abs,
@@ -17,18 +17,20 @@ import {
   vec2,
   vec3,
 } from 'three/tsl';
-import type { BufferGeometry, Mesh, UniformNode, Vector3 } from 'three/webgpu';
+import { BufferGeometry, type Mesh, type UniformNode, type Vector3 } from 'three/webgpu';
 import type { Font } from 'three/addons/loaders/FontLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ActiveScreen, ScreenTransition, Timeline } from '../../timeline/traits.js';
 import {
-  createLogoGeometry,
   createShardGeometry,
   createWordGeometry,
   logoBoxes,
+  type WordBounds,
 } from './utils/geometry.js';
 import { useTransitionOpacity } from '../../transition/use-transition-opacity.js';
 import { warmUp } from '../../view/utils/warm-up.js';
+import { soundActions } from '../../sound/actions.js';
+import { pitch } from '../../sound/systems.js';
 
 export type PrincipleWord = {
   id: string;
@@ -39,11 +41,9 @@ export type PrincipleWord = {
 };
 
 /**
- * The principles break into little pieces that tumble away and settle as the Poimandres mark.
- * The pieces are cut from the same outlines the text is set in, so the words shatter exactly
- * as they appear on screen, and the whole flight is one uniform on the GPU. As pieces land they
- * swell and are trimmed to the mark's silhouette, so they melt together into the exact shape.
- * A held mark stays on screen beneath the charter until the sheet has covered it.
+ * Letter fragments peel away in a staggered stream and stack into a loose collage of the mark.
+ * Unreleased fragments retain the words while the earliest arrivals begin building the logo.
+ * The collage stays beneath the charter until the sheet covers it.
  */
 export function PrincipleShardsRenderer({
   active,
@@ -65,59 +65,58 @@ export function PrincipleShardsRenderer({
   font: Font;
   words: RefObject<PrincipleWord[]>;
 }) {
+  const world = useWorld();
   const renderer = useThree((state) => state.renderer);
   const scene = useThree((state) => state.scene);
   const timeline = useQueryFirst(Timeline);
   const transition = useTrait(useTarget(timeline, ActiveScreen), ScreenTransition);
   const settled = active || hold;
   const progress = useTransitionOpacity(settled, {
-    duration: active ? (transition?.duration ?? 2.8) : 0.5,
+    duration: active ? (transition?.duration ?? 4.2) : 0.5,
     ease: (value) => value,
     clock: 'frames',
   });
   const presence = useTransitionOpacity(settled, {
-    duration: settled ? 0.18 : 0.5,
+    duration: settled ? 0.08 : 0.5,
     clock: 'frames',
   });
   const mesh = useRef<Mesh>(null);
-  const solid = useRef<Mesh>(null);
-  const shards = useRef<BufferGeometry | null>(null);
-  const [logo] = useResource(
-    () => createLogoGeometry(5.2),
-    (logo) => {
-      logo.dispose();
-      shards.current?.dispose();
-      shards.current = null;
-    },
-    []
+  const heard = useRef({
+    progress: 1,
+    releases: [] as number[],
+    arrivals: [] as { at: number; pan: number }[],
+    finished: 1,
+  });
+  const [shards] = useResource(
+    () => new BufferGeometry(),
+    (geometry) => geometry.dispose(),
+    [font]
   );
 
   const anchor = attribute<'vec3'>('center', 'vec3');
   const landing = attribute<'vec3'>('landing', 'vec3');
   const cloud = attribute<'vec3'>('cloud', 'vec3');
   const timing = attribute<'vec4'>('timing', 'vec4');
-  // The outlines take over before a gentle left to right release.
-  const released = timing.x.mul(0.12).add(0.12);
-  const flight = progress.sub(released).div(timing.y.mul(0.05).add(0.7)).clamp();
-  // Quintic easing leaves and arrives with zero velocity and acceleration.
-  const travel = flight.pow(3).mul(flight.mul(flight.mul(6).sub(15)).add(10));
-  const arc = travel.mul(travel.oneMinus()).mul(4);
-  const pivot = mix(anchor, center.add(landing), travel).add(
-    vec3(cloud.x.mul(0.16), cloud.y.mul(0.22), 0).mul(arc)
-  );
-  // Rotation follows the same easing, so it slows continuously into the mark.
-  const spin = timing.z.sub(0.5).mul(2.4).mul(travel);
-  // Settled pieces swell into their neighbours so the mark closes up without gaps
-  const swell = mix(1, cloud.z, smoothstep(0.5, 1, flight));
-  const local = positionLocal.sub(anchor).mul(swell);
+  const flight = progress.sub(timing.x).div(timing.y).clamp();
+  // A long flight slows into a restrained overshoot so each landing remains easy to follow
+  const remaining = flight.sub(1);
+  const overshoot = timing.z.mul(0.35).add(0.45);
+  const travel = remaining
+    .pow(2)
+    .mul(remaining.mul(overshoot.add(1)).add(overshoot))
+    .add(1);
+  const bend = smoothstep(0, 1, flight);
+  const arc = bend.mul(bend.oneMinus()).mul(4);
+  const pivot = mix(anchor, center.add(landing), travel).add(vec3(cloud.x, cloud.y, 0).mul(arc));
+  const spin = timing.z.sub(0.5).mul(0.65).mul(travel);
+  const local = positionLocal.sub(anchor).mul(mix(1, cloud.z, travel));
   const turned = vec3(
     local.x.mul(cos(spin)).sub(local.y.mul(sin(spin))),
     local.x.mul(sin(spin)).add(local.y.mul(cos(spin))),
     local.z
   );
-  const placed = varying(pivot.add(turned));
-  // Signed distance to the mark's silhouette in the lettering's space, negative inside
-  const point = placed.xy.sub(center.xy).div(5.2).add(0.5);
+  // Leave a ragged margin around the blocks while keeping the logo's negative space open
+  const point = varying(pivot.add(turned)).xy.sub(center.xy).div(5.2).add(0.5);
   const distance = logoBoxes
     .map(([left, bottom, right, top]) => {
       const offset = abs(point.sub(vec2((left + right) / 2, (bottom + top) / 2))).sub(
@@ -126,73 +125,106 @@ export function PrincipleShardsRenderer({
       return offset.max(0).length().add(offset.x.max(offset.y).min(0));
     })
     .reduce((nearest, box) => nearest.min(box), float(10));
-  const feather = fwidth(distance).max(0.0001);
-  const inside = smoothstep(feather, feather.negate(), distance);
-  // Landing pieces are trimmed to the silhouette, so the assembled mark fits its lines
-  const trim = smoothstep(0.65, 1, flight);
-  const fade = presence.mul(covered.oneMinus());
+  const edge = distance.sub(timing.w.mul(0.008).add(0.004));
+  const feather = fwidth(edge).max(0.0001);
+  const inside = smoothstep(feather.negate(), feather, edge).oneMinus();
   const material = {
     position: pivot.add(turned),
-    opacity: fade.mul(mix(1, inside, trim)),
-    mark: positionLocal.add(center),
-    markOpacity: smoothstep(0.86, 1, progress).mul(fade),
+    opacity: presence.mul(covered.oneMinus()).mul(mix(1, inside, smoothstep(0.65, 1, flight))),
+    // Subtle ink differences keep overlapping scraps legible in the assembled collage
+    color: vec3(timing.w.mul(0.1).mul(travel)),
   };
 
   useFrame(() => {
-    if (!mesh.current) return;
-    if (!shards.current) {
+    const previous = heard.current.progress;
+    heard.current.progress = progress.value;
+    if (!mesh.current || !shards) return;
+    if (!shards.hasAttribute('position')) {
+      if (words.current.some(({ text }) => !text || text.commitState().status !== 'committed'))
+        return;
       const geometries: BufferGeometry[] = [];
+      const lines: WordBounds[] = [];
       for (const { word, y, text } of words.current) {
-        if (!text || text.commitState().status !== 'committed') return;
-        const outline = createWordGeometry(font, word, text.glyphs(), 0, y);
-        if (outline) geometries.push(outline);
+        const outline = createWordGeometry(font, word, text!.glyphs(), 0, y);
+        if (outline) {
+          outline.computeBoundingBox();
+          const { min, max } = outline.boundingBox!;
+          lines.push({ left: min.x, right: max.x, bottom: min.y, top: max.y });
+          geometries.push(outline);
+        }
       }
       if (geometries.length === 0) return;
-      shards.current = createShardGeometry(mergeGeometries(geometries), 5.2);
-      mesh.current.geometry = shards.current;
+      const outlines = mergeGeometries(geometries);
+      const pieces = createShardGeometry(outlines, 5.2, { lines });
+      const centers = pieces.getAttribute('center');
+      const timings = pieces.getAttribute('timing');
+      const landings = pieces.getAttribute('landing');
+      const seen = new Set<string>();
+      const arrivals: { at: number; pan: number }[] = [];
+      heard.current.releases = lines.map(() => Infinity);
+      for (let vertex = 0; vertex < centers.count; vertex += 3) {
+        const key = `${centers.getX(vertex)},${centers.getY(vertex)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const row = lines.findIndex(
+          ({ bottom, top }) => centers.getY(vertex) >= bottom && centers.getY(vertex) <= top
+        );
+        if (row >= 0)
+          heard.current.releases[row] = Math.min(heard.current.releases[row]!, timings.getX(vertex));
+        arrivals.push({
+          at: timings.getX(vertex) + timings.getY(vertex),
+          pan: landings.getX(vertex) / 5.2,
+        });
+      }
+      arrivals.sort((a, b) => a.at - b.at);
+      // A handful of representative landings gives the assembly detail without voicing every scrap
+      heard.current.arrivals = Array.from(
+        { length: Math.min(10, arrivals.length) },
+        (_, index) => arrivals[Math.floor((index / Math.min(10, arrivals.length)) * arrivals.length)]!
+      );
+      heard.current.finished = arrivals.at(-1)?.at ?? 1;
+      shards.copy(pieces);
+      pieces.dispose();
+      outlines.dispose();
+      for (const geometry of geometries) geometry.dispose();
       void warmUp(renderer, mesh.current, camera, scene);
     }
     mesh.current.visible = presence.value > 0;
-    if (solid.current) solid.current.visible = mesh.current.visible;
+    if (!active || progress.value <= previous || covered.value > 0) return;
+    const cue = soundActions(world).cueSound;
+    // Follow the visible frame clock so cues stop when leaving and stay aligned through slow frames
+    for (const [index, at] of heard.current.releases.entries()) {
+      if (previous >= at || progress.value < at) continue;
+      cue('rustle', -0.3, 0.92 + index * 0.04, 0.025);
+    }
+    for (let index = 0; index < heard.current.arrivals.length; index++) {
+      const { at, pan } = heard.current.arrivals[index]!;
+      if (previous >= at || progress.value < at) continue;
+      cue('rustle', pan, 1.8 + (index % 3) * 0.15, 0.016);
+    }
+    if (previous < heard.current.finished && progress.value >= heard.current.finished)
+      cue('chime', 0, pitch(-10), 0.04);
   });
 
-  if (!logo) return null;
+  if (!shards) return null;
 
   return (
-    <>
-      <mesh
-        ref={solid}
-        name="principle-mark"
-        geometry={logo}
-        frustumCulled={false}
-        renderOrder={-0.6}
-        visible={false}
-      >
-        <meshBasicNodeMaterial
-          color="#000000"
-          positionNode={material.mark}
-          opacityNode={material.markOpacity}
-          depthTest={false}
-          depthWrite={false}
-          transparent
-        />
-      </mesh>
-      <mesh
-        ref={mesh}
-        name="principle-shards"
-        frustumCulled={false}
-        renderOrder={-0.5}
-        visible={false}
-      >
-        <meshBasicNodeMaterial
-          color="#000000"
-          positionNode={material.position}
-          opacityNode={material.opacity}
-          depthTest={false}
-          depthWrite={false}
-          transparent
-        />
-      </mesh>
-    </>
+    <mesh
+      ref={mesh}
+      name="principle-shards"
+      geometry={shards}
+      frustumCulled={false}
+      renderOrder={-0.5}
+      visible={false}
+    >
+      <meshBasicNodeMaterial
+        colorNode={material.color}
+        positionNode={material.position}
+        opacityNode={material.opacity}
+        depthTest={false}
+        depthWrite={false}
+        transparent
+      />
+    </mesh>
   );
 }

@@ -34,6 +34,9 @@ async function prepareSamples(): Promise<SoundDraw['samples']> {
     sparkle,
     pluck,
     swell,
+    drop,
+    rustle,
+    veil,
     fall,
     glitch,
     flight,
@@ -207,6 +210,43 @@ async function prepareSamples(): Promise<SoundDraw['samples']> {
       buffer.getChannelData(0).reverse();
       return buffer;
     }),
+    bake(0.9, 32_000, 12, (context) => {
+      // Soft falling air with a faint tone beneath it as the spheres leave the frame
+      oscillator(
+        context,
+        'sine',
+        [0, 660, 0.25, 590, 0.55, 260, 0.9, 65],
+        [0, 1e-4, 0.18, 0.02, 0.45, 0.1, 0.68, 0.06, 0.9, 1e-4]
+      );
+      noise(
+        context,
+        [0, 1e-4, 0.25, 0.04, 0.6, 0.5, 0.9, 1e-4],
+        filter(context, 'bandpass', [0, 1200, 0.3, 900, 0.9, 180], 0.8)
+      );
+    }),
+    bake(0.32, 32_000, 12, (context) => {
+      // Paper separating into scraps, a few soft brushes of filtered noise
+      noise(
+        context,
+        [0, 1e-4, 0.025, 0.3, 0.07, 0.08, 0.12, 0.22, 0.18, 0.05, 0.23, 0.1, 0.32, 1e-4],
+        filter(context, 'bandpass', [0, 1500, 0.32, 700], 0.6)
+      );
+    }),
+    bake(1.6, 32_000, 12, (context) => {
+      // Silk brushing hollow glass, with a soft flutter that relaxes as the curtain lands
+      const flutter = gain(context, 0.8);
+      oscillator(context, 'sine', [0, 9, 1.6, 3], 1, gain(context, 0.16, flutter.gain));
+      noise(
+        context,
+        [0, 1e-4, 0.18, 0.16, 0.7, 0.5, 1.15, 0.18, 1.6, 1e-4],
+        filter(context, 'bandpass', [0, 1100, 0.75, 720, 1.6, 430], 5, flutter)
+      );
+      noise(
+        context,
+        [0, 1e-4, 0.3, 0.08, 0.85, 0.2, 1.6, 1e-4],
+        filter(context, 'bandpass', [0, 1700, 0.9, 1200, 1.6, 650], 7, flutter)
+      );
+    }),
     bake(1.2, 11_025, 8, (context) => {
       // Air settling away: noise through a band that falls from a quick onset and fades as it sinks.
       noise(
@@ -335,6 +375,9 @@ async function prepareSamples(): Promise<SoundDraw['samples']> {
     sparkle,
     pluck,
     swell,
+    drop,
+    rustle,
+    veil,
     fall,
     glitch,
     flight,

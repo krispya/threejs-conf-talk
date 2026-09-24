@@ -4,6 +4,7 @@ import { after, before, test } from 'node:test';
 import { Font } from 'three/addons/loaders/FontLoader.js';
 import { Box3, Mesh, ShapeGeometry, Vector3 } from 'three/webgpu';
 import { createServer } from 'vite';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 let server;
 let shards;
@@ -58,11 +59,11 @@ void test('word outlines land on the ink boxes the text engine reports', () => {
   assert(center.x > 1.2 && center.y < -2.1);
 });
 
-void test('a word shatters into little pieces that each land on the mark', () => {
+void test('letter scraps preserve the word and trickle into a loose collage of the mark', () => {
   const words = new ShapeGeometry(font.generateShapes('Open', 1.42));
-  const geometry = shards.createShardGeometry(words, 5, 0.16);
+  const geometry = shards.createShardGeometry(words, 5);
   const pieces = geometry.userData.pieces;
-  assert(pieces > 40 && pieces < 400, `${pieces} pieces`);
+  assert(pieces > 15 && pieces < 150, `${pieces} pieces`);
   const position = geometry.getAttribute('position');
   const center = geometry.getAttribute('center');
   const landing = geometry.getAttribute('landing');
@@ -82,7 +83,7 @@ void test('a word shatters into little pieces that each land on the mark', () =>
       position.getX(vertex) - center.getX(vertex),
       position.getY(vertex) - center.getY(vertex)
     );
-    assert(spread < 0.4, `vertex ${vertex} is ${spread} from its center`);
+    assert(spread < 0.7, `vertex ${vertex} is ${spread} from its center`);
     centers.add(`${center.getX(vertex)},${center.getY(vertex)}`);
     const x = landing.getX(vertex);
     const y = landing.getY(vertex);
@@ -94,12 +95,76 @@ void test('a word shatters into little pieces that each land on the mark', () =>
       const value = timing.array[vertex * 4 + lane];
       assert(value >= 0 && value < 1);
     }
-    // Every piece grows on landing so neighbours overlap
-    assert(cloud.getZ(vertex) >= 1 && cloud.getZ(vertex) <= 6);
+    // Overlapping scraps retain varied sizes and leave the logo readable
+    assert(cloud.getZ(vertex) >= 0.79 && cloud.getZ(vertex) <= 3.5);
+    assert(timing.getX(vertex) + timing.getY(vertex) < 1, 'Every scrap lands before the beat ends');
   }
   assert.equal(centers.size, pieces);
-  const repeat = shards.createShardGeometry(words, 5, 0.16);
+  const repeat = shards.createShardGeometry(words, 5);
   assert.deepEqual(repeat.getAttribute('landing').array, landing.array);
+});
+
+void test('words break apart from top to bottom with overlapping releases and build the whole mark early', () => {
+  const outlines = ['Simple', 'Pragmatic', 'Stable', 'Open', 'Tasteful*'].map((word, index) =>
+    new ShapeGeometry(font.generateShapes(word, 1.42)).translate(0, -index * 1.36, 0)
+  );
+  const lines = outlines.map((outline) => {
+    outline.computeBoundingBox();
+    const { min, max } = outline.boundingBox;
+    return { left: min.x, right: max.x, bottom: min.y, top: max.y };
+  });
+  const words = mergeGeometries(outlines);
+  const geometry = shards.createShardGeometry(words, 5.2, { lines });
+  const center = geometry.getAttribute('center');
+  const timing = geometry.getAttribute('timing');
+  const landing = geometry.getAttribute('landing');
+  const starts = lines.map(() => Infinity);
+  const ends = lines.map(() => 0);
+  const arrivals = lines.map(() => Infinity);
+  const blocks = new Set();
+  let waiting = 0;
+  let flying = 0;
+  let landed = 0;
+  for (let vertex = 0; vertex < center.count; vertex++) {
+    const row = lines.findIndex(
+      (line) => center.getY(vertex) >= line.bottom && center.getY(vertex) <= line.top
+    );
+    const release = timing.getX(vertex);
+    const arrival = release + timing.getY(vertex);
+    if (row >= 0) {
+      starts[row] = Math.min(starts[row], release);
+      ends[row] = Math.max(ends[row], release);
+      arrivals[row] = Math.min(arrivals[row], arrival);
+    }
+    if (release > 0.5) waiting++;
+    else if (arrival > 0.5) flying++;
+    else landed++;
+    if (arrival <= 0.6) {
+      const x = landing.getX(vertex) / 5.2 + 0.5;
+      const y = landing.getY(vertex) / 5.2 + 0.5;
+      blocks.add(
+        shards.logoBoxes.findIndex(
+          ([left, bottom, right, top]) => x >= left && x <= right && y >= bottom && y <= top
+        )
+      );
+    }
+  }
+  for (let row = 1; row < lines.length; row++) {
+    assert(starts[row] > starts[row - 1], 'Words begin breaking from top to bottom');
+    assert(
+      starts[row] < ends[row - 1],
+      'The next word starts while the previous word is still breaking'
+    );
+  }
+  assert(starts.at(-1) < arrivals[0], 'Every word has begun before the first word finishes arriving');
+  assert(
+    waiting > 0 && flying > 0 && landed > 0,
+    'Text, moving scraps, and logo coexist midway through'
+  );
+  assert.equal(blocks.size, 5, 'Early arrivals establish every block of the logo');
+  geometry.dispose();
+  words.dispose();
+  for (const outline of outlines) outline.dispose();
 });
 
 void test('empty words produce an empty geometry instead of failing', () => {

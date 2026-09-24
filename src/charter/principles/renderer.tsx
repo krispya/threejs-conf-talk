@@ -7,7 +7,7 @@ import {
   useThree,
   type ThreeCamera,
 } from '@react-three/fiber/webgpu';
-import { useTrait } from 'koota/react';
+import { useTrait, useWorld } from 'koota/react';
 import { easing } from 'math/time';
 import { useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { fwidth, positionLocal, smoothstep, uniform, uv, vec4, color, vec3 } from 'three/tsl';
@@ -20,6 +20,8 @@ import { useTransitionOpacity } from '../../transition/use-transition-opacity.js
 import { warmUp } from '../../view/utils/warm-up.js';
 import { PrincipleShardsRenderer, type PrincipleWord } from './shards-renderer.js';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
+import { soundActions } from '../../sound/actions.js';
+import { pitch } from '../../sound/systems.js';
 
 void useMsdf.preload(fonts.sans);
 void useMsdf.preload(fonts.mono);
@@ -33,6 +35,7 @@ export function PrinciplesRenderer({
   camera: ThreeCamera;
   panel: ReturnType<typeof useTransitionOpacity>;
 }) {
+  const world = useWorld();
   const font = useMsdf(fonts.sans);
   const mono = useMsdf(fonts.mono);
   const typeface = useLoader(FontLoader, fonts.geometry);
@@ -68,6 +71,7 @@ export function PrinciplesRenderer({
   const root = useRef<Group>(null);
   const lettering = useRef<Group>(null);
   const list = useRef<Group>(null);
+  const heardPanel = useRef(1);
   const renderer = useThree((state) => state.renderer);
   const scene = useThree((state) => state.scene);
   const target = new Vector3();
@@ -92,6 +96,14 @@ export function PrinciplesRenderer({
 
   useFrame((state) => {
     if (!root.current || !lettering.current || !list.current) return;
+    if (visible && heardPanel.current === 0 && panel.value > 0)
+      soundActions(world).cueSound(
+        'veil',
+        0,
+        1.6 / Math.max(0.1, (transition?.revealDelay ?? 1.75) - 0.15),
+        0.035
+      );
+    heardPanel.current = panel.value;
     root.current.visible = panel.value > 0 || (hold && covered.value < 1);
     if (!root.current.visible) return;
     const { x, y, z } = camera.position;
@@ -133,6 +145,7 @@ export function PrinciplesRenderer({
               key={id}
               visible={visible && !logo}
               still={logo}
+              note={[2, 7, 12, 14][index]! - 12}
               delay={(transition?.revealDelay ?? 0) + index * 0.14}
               position={[0, 2.6 - index * 1.36, 0]}
             >
@@ -149,6 +162,7 @@ export function PrinciplesRenderer({
           <PrincipleLine
             visible={tasteful}
             still={logo}
+            note={7}
             delay={transition?.revealDelay ?? 0}
             position={[0, 2.6 - principles.length * 1.36, 0]}
           >
@@ -179,6 +193,7 @@ export function PrinciplesRenderer({
 function PrincipleLine({
   visible,
   still = false,
+  note,
   delay,
   position,
   children,
@@ -186,17 +201,25 @@ function PrincipleLine({
   visible: boolean;
   /** Fade in place so particles can take over from the exact letter positions */
   still?: boolean;
+  note?: number;
   delay: number;
   position: [number, number, number];
   children: React.ReactNode;
 }) {
+  const world = useWorld();
+  const heard = useRef(1);
   // Hold the words until their stationary pieces are opaque, then hand over before flight.
   const arrival = useTransitionOpacity(visible, {
-    duration: visible ? 0.85 : still ? 0.12 : 0.2,
-    delay: visible ? delay : still ? 0.18 : 0,
+    duration: visible ? 0.85 : still ? 0.06 : 0.2,
+    delay: visible ? delay : still ? 0.03 : 0,
     clock: still ? 'frames' : 'timeline',
   });
   const drop = useMemo(() => uniform(1), []);
+  useFrame(() => {
+    if (visible && note !== undefined && heard.current <= 0.025 && arrival.value > 0.025)
+      soundActions(world).cueSound('doo', -0.25, pitch(note), 0.065);
+    heard.current = arrival.value;
+  });
   const dropRef = useMutableCallback(drop);
   useLayoutEffect(() => {
     dropRef.current.value = still ? 0 : 1;

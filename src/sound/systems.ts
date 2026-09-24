@@ -148,6 +148,9 @@ const MIX: Readonly<Record<OneShot, readonly [hall: number, expanse: number]>> =
   sparkle: [0.2, 1],
   pluck: [0.4, 0.35],
   swell: [0.6, 0.3],
+  drop: [0.2, 0],
+  rustle: [0.15, 0],
+  veil: [0.45, 0.1],
   fall: [0.35, 0],
 };
 
@@ -198,6 +201,7 @@ export function listenForSounds(world: World) {
       forward &&
       !data.warpVisible &&
       !data.initiativePortalVisible &&
+      !data.principlesVisible &&
       // Cards and sheets that slide swoosh from their own views as they move
       !SLIDES.some((key) => data[key] !== forward[key]) &&
       data.historyPages === forward.historyPages
