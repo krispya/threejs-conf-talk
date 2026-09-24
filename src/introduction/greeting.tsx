@@ -1,4 +1,6 @@
 import { useResource } from '../view/hooks.js';
+import { soundActions } from '../sound/actions.js';
+import { pitch } from '../sound/systems.js';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { Time } from '../time/traits.js';
 import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
@@ -68,6 +70,8 @@ export function GreetingRenderer({
   const gearBubble = useRef<Group>(null);
   const thinking = useRef<Group>(null);
   const gear = useRef<Group>(null);
+  // Which speech bubbles have popped since the screen began
+  const popped = useRef({ at: -1, hello: false, thinking: false, gear: false });
   const [model] = useResource(
     () => {
       const geometry = (gltf.scene.getObjectByName('logo') as Mesh).geometry.clone();
@@ -136,6 +140,23 @@ export function GreetingRenderer({
     bubble.current.scale.setScalar(Math.max(0.001, pop));
     bubble.current.position.y = 1.28 + Math.sin(now * 0.9) * 0.04;
     bubble.current.rotation.z = lerp(-0.24, 0.06, pop);
+    // Each speech bubble pops in with a bloop of its own as its spring sets off, on the notes of the
+    // screen's chord
+    const heard = popped.current;
+    if (heard.at !== timing?.startedAt) {
+      heard.at = timing?.startedAt ?? -1;
+      heard.hello = heard.thinking = heard.gear = false;
+    }
+    const sound = (bubble: 'hello' | 'thinking' | 'gear', at: number, note: number, pan: number) => {
+      if (heard[bubble] || elapsed < at) return;
+      heard[bubble] = true;
+      soundActions(world).cueSound('bloop', pan, pitch(note), 0.32);
+    };
+    if (visible && !work) sound('hello', 1.35, 4, -0.1);
+    if (work) {
+      sound('thinking', 0.4, 2, -0.15);
+      sound('gear', 0.6, 9, 0.15);
+    }
     const wave = clamp((elapsed - 1.5) / 1.8, 0, 1);
     hand.current.rotation.z = Math.sin(wave * Math.PI * 8) * Math.sin(wave * Math.PI) * 0.25;
 

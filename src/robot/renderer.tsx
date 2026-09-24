@@ -16,6 +16,7 @@ import { teamLayout } from '../profile/utils/layout.js';
 import { withMeshopt } from '../view/utils/load-gltf.js';
 import { warmUp } from '../view/utils/warm-up.js';
 import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
+import { soundActions } from '../sound/actions.js';
 
 useLoader.preload(GLTFLoader, './meshes/robot_emoji_apple/scene.glb', withMeshopt);
 
@@ -47,6 +48,8 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
   const head = useRef<Group>(null);
   const warmed = useRef(false);
   const motion = useRef({ value: 0, from: 0, target: 0, rise: 0, exitY: 0 });
+  // What the reveal last sounded, so each beat of it plays once per entrance
+  const heard = useRef({ rise: 0, ignition: 0, flash: 0, face: 0, flicker: 0, laser: 0 });
   const opacity = useMemo(() => uniform(0), []);
   const eyes = useMemo(() => uniform(0), []);
   const fault = useMemo(() => uniform(0), []);
@@ -95,7 +98,10 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
     motion.current.from = motion.current.value;
     motion.current.target = visible ? 1 : 0;
     motion.current.exitY = head.current?.position.y ?? 0;
-    if (entering) motion.current.rise = 0;
+    if (entering) {
+      motion.current.rise = 0;
+      heard.current = { rise: 0, ignition: 0, flash: 0, face: 0, flicker: 0, laser: 0 };
+    }
   }, [visible, warping, timing, community]);
 
   useFrame((state) => {
@@ -200,9 +206,27 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
     const ignition = easing.cubicOut(
       clamp(community ? (reveal.rise * 3.8 - 0.45) / 0.65 : (reveal.rise - 0.55) / 0.22, 0, 1)
     );
-    const flash = Math.sin(
-      clamp(community ? (reveal.rise * 3.8 - 0.65) / 0.6 : (reveal.rise - 0.6) / 0.2, 0, 1) * Math.PI
+    const flashing = clamp(
+      community ? (reveal.rise * 3.8 - 0.65) / 0.6 : (reveal.rise - 0.6) / 0.2,
+      0,
+      1
     );
+    const flash = Math.sin(flashing * Math.PI);
+    // Something vast arrives: a braam as the robot rises or its face comes out of the dark, a surge of power as its
+    // eyes ignite, and a glint as they flash, darker and slower from the dark
+    const sounded = heard.current;
+    if (visible) {
+      const { cueSound } = soundActions(world);
+      const rate = community ? 0.84 : 1;
+      if (community ? sounded.face === 0 && face > 0 : sounded.rise === 0 && reveal.rise > 0)
+        cueSound('braam', 0, rate, 0.6, 0, true);
+      if (sounded.ignition === 0 && ignition > 0) cueSound('surge', 0, rate, 0.4, 0, true);
+      if (sounded.flash < 0.5 && flashing >= 0.5) cueSound('glint', 0, rate, 0.25, 0, true);
+    }
+    sounded.rise = reveal.rise;
+    sounded.ignition = ignition;
+    sounded.flash = flashing;
+    sounded.face = face;
     model.uplight.intensity = 8 * face * (1 - friendly.value);
     model.rim.intensity = 3 * face * (1 - friendly.value);
     model.fill.intensity = 0.25 * face * (1 - friendly.value);
@@ -235,6 +259,15 @@ export function RobotReveal({ variant = 'title' }: { variant?: 'title' | 'commun
         ((framing.width + framing.height) / Math.max(scale, 0.001)) *
         easing.cubicOut(clamp(age / 0.12, 0, 1));
     }
+    // The eyes crackle as they flicker, and each eye fires a laser toward where its ray shoots
+    if (sounded.flicker === 0 && flicker > 0) soundActions(world).cueSound('tick', 0, 0.7, 0.04);
+    if (sounded.laser === 0 && laser.value > 0) {
+      const aim = Math.cos(shot.current.angle) * 0.5;
+      soundActions(world).cueSound('laser', aim - 0.25, 1, 0.14, 0, true);
+      soundActions(world).cueSound('laser', aim + 0.25, 1.03, 0.14, 0.012, true);
+    }
+    sounded.flicker = flicker;
+    sounded.laser = laser.value;
     fault.value = Math.max(flicker, laser.value * friendly.value * reveal.value);
     opacity.value = face * reveal.value;
     eyes.value = Math.max(

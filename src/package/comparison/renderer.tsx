@@ -11,6 +11,8 @@ import { Timeline } from '../../timeline/traits.js';
 import { fonts, ramp } from '../../theme.js';
 import { MeltMaterial as MeltMaterialImpl } from './melt-material.js';
 import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
+import { soundActions } from '../../sound/actions.js';
+import { varied } from '../../sound/systems.js';
 
 const MeltMaterial = extend(MeltMaterialImpl);
 
@@ -24,6 +26,8 @@ export function CodeComparisonRenderer() {
   const visible = data?.codeComparisonVisible ?? false;
   const row = useRef<Group>(null);
   const items = useRef<(Group | null)[]>([]);
+  // The cards swoosh once together as the first of them starts sliding
+  const slid = useRef(true);
   const motion = useRef(
     Array.from({ length: 4 }, () => ({ value: 1, from: 1, target: 1, delay: 0, duration: 0 }))
   );
@@ -46,6 +50,7 @@ export function CodeComparisonRenderer() {
       item.delay = entering ? 0.9 + index * 0.12 : 0;
       item.duration = visible ? Math.max(0, (timing?.duration ?? 0) - item.delay) : 0.65;
     });
+    slid.current = motion.current.every((item) => item.from === item.target);
   }, [visible, data?.id, data?.packageEntry, timing]);
 
   useFrame((state) => {
@@ -61,6 +66,15 @@ export function CodeComparisonRenderer() {
       const group = items.current[index];
       if (!group) return;
       const progress = item.duration <= 0 ? 1 : clamp((elapsed - item.delay) / item.duration, 0, 1);
+      if (!slid.current && progress > 0) {
+        slid.current = true;
+        soundActions(world).cueSound(
+          'whoosh',
+          0,
+          varied(visible ? 1.3 : 1.6),
+          visible ? 0.035 : 0.025
+        );
+      }
       item.value = lerp(
         item.from,
         item.target,

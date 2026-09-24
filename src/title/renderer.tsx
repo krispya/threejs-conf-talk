@@ -18,6 +18,7 @@ import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { useTitleFlight } from './use-flight.js';
 import { useTitleGlitch } from './use-glitch.js';
 import { usePortal } from './use-portal.js';
+import { TitleRumble } from './rumble.js';
 import { TitleTravel } from './travel.js';
 import { TitleObjects } from './objects.js';
 import { RobotReveal } from '../robot/renderer.js';
@@ -220,6 +221,7 @@ function TitleView({ entity }: { entity: Entity }) {
         />
         <RobotReveal />
       </group>
+      <TitleRumble flight={motion} steps={steps} />
       <mesh
         ref={scrimMesh}
         name="foreground-scrim"

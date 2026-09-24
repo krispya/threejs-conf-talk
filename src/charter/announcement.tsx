@@ -1,14 +1,17 @@
 import { useActiveScreen } from '../timeline/hooks.js';
 import { useFrame, useTexture } from '@react-three/fiber/webgpu';
+import { useWorld } from 'koota/react';
 import { lerp } from 'math';
 import { easing } from 'math/time';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { color, normalView, smoothstep } from 'three/tsl';
 import { SRGBColorSpace, type Group } from 'three/webgpu';
 import { PreviousScreen, Screen } from '../timeline/traits.js';
 import type { FrameStep } from '../view/hooks.js';
 import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { DocumentCollapse } from './document-collapse.js';
+import { soundActions } from '../sound/actions.js';
+import { varied } from '../sound/systems.js';
 
 useTexture.preload('./announcements/charter-post.svg');
 
@@ -34,12 +37,19 @@ export function AnnouncementRenderer() {
   const gold = color('#d7bb81').mul(normalView.z.abs().mul(0.32).add(0.68));
   const root = useRef<Group>(null);
   const sheet = useRef<Group>(null);
+  const world = useWorld();
+  // How far the post had come in last frame, so each entrance swooshes once
+  const slid = useRef(0);
   // The collapse captures the placed sheet, so it steps after the frame is positioned
-  const steps = new Set<FrameStep>();
+  const steps = useMemo(() => new Set<FrameStep>(), []);
 
   useFrame((state, delta) => {
     if (root.current && sheet.current) {
       root.current.visible = progress.value > 0;
+      // The post slides up with a long swoosh as it comes in
+      if (visible && slid.current === 0 && progress.value > 0)
+        soundActions(world).cueSound('whoosh', -0.2, varied(0.8), 0.045);
+      slid.current = progress.value;
       sheet.current.visible = !collapsing;
       if (root.current.visible && !collapsing) {
         const viewport = state.viewport.getCurrentViewport(state.camera, root.current.position);

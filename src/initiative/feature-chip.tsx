@@ -8,6 +8,8 @@ import { SRGBColorSpace, type Group } from 'three/webgpu';
 import { allProfiles, type ProfileLogin } from '../profile/data.js';
 import { brand, fonts, ramp } from '../theme.js';
 import type { useTransitionOpacity } from '../transition/use-transition-opacity.js';
+import { soundActions } from '../sound/actions.js';
+import { CHIPS, pitch } from '../sound/systems.js';
 
 export function InitiativeFeatureChip({
   children,
@@ -29,11 +31,14 @@ export function InitiativeFeatureChip({
   const group = useRef<Group>(null);
   const text = useRef<ComponentRef<typeof Text>>(null);
   const entrance = useRef(0);
+  // How far the entrance had come when last shown, so each chip lands with its note once
+  const sounded = useRef(0);
   const opacity = useMemo(() => uniform(0), []);
   const opacityRef = useMutableCallback(opacity);
   // Chips keep their meshes and shaders between screens, so a new label restarts the entrance
   useLayoutEffect(() => {
     entrance.current = 0;
+    sounded.current = 0;
   }, [children, profile]);
 
   useFrame((_, delta) => {
@@ -42,6 +47,12 @@ export function InitiativeFeatureChip({
     entrance.current += Math.min(delta, 1 / 30);
     const progress = Math.min(1, Math.max(0, (entrance.current - 0.35 - index * 0.18) / 0.55));
     const reveal = 1 - (1 - progress) ** 3;
+    // Each chip lands with a soft mallet note a step above the last as the stack staggers in
+    if (visibility.value > 0) {
+      if (sounded.current === 0 && progress > 0)
+        soundActions(world).cueSound('doo', 0.4, pitch(CHIPS[index % CHIPS.length]! + 2), 0.09);
+      sounded.current = progress;
+    }
     // Shader opacity follows each chip's staggered entrance and the shared label fade
     opacity.value = reveal * visibility.value;
     const elapsed = world.get(Time)!.elapsed;

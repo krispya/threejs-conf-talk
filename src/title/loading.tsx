@@ -2,11 +2,15 @@ import { useFrame } from '@react-three/fiber/webgpu';
 import { useQueryFirst } from 'koota/react';
 import { useRef, useState } from 'react';
 import type { Object3D } from 'three/webgpu';
+import { loadSamples } from '../sound/samples.js';
 import { Ref } from '../view/traits.js';
 import { warmUp } from '../view/utils/warm-up.js';
 import { Title } from './traits.js';
 
-/** Reveal the opening after its mounted geometry has compiled and rendered a frame. */
+/**
+ * Reveal the opening after its mounted geometry has compiled and rendered a frame, and every
+ * sound has baked and loaded, so the first cue never plays silent.
+ */
 export function OpeningReady({ onReady }: { onReady: () => void }) {
   const title = useQueryFirst(Title, Ref);
   const pending = useRef({ object: null as Object3D | null, compiled: false });
@@ -23,12 +27,14 @@ export function OpeningReady({ onReady }: { onReady: () => void }) {
       }
       preparation.object = object;
       preparation.compiled = false;
-      void warmUp(renderer, object, camera, scene)?.then(
-        () => {
-          if (preparation.object === object) preparation.compiled = true;
-        },
-        (error: unknown) => setError(error)
-      );
+      void warmUp(renderer, object, camera, scene)
+        ?.then(() => loadSamples())
+        .then(
+          () => {
+            if (preparation.object === object) preparation.compiled = true;
+          },
+          (error: unknown) => setError(error)
+        );
     },
     { phase: 'finish' }
   );

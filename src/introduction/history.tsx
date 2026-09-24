@@ -1,5 +1,9 @@
 import { useTexture, useFrame } from '@react-three/fiber/webgpu';
+import { useWorld } from 'koota/react';
 import { useActiveScreen } from '../timeline/hooks.js';
+import { soundActions } from '../sound/actions.js';
+import { varied } from '../sound/systems.js';
+import { clamp } from 'math';
 import { useLayoutEffect, useRef } from 'react';
 import { SRGBColorSpace, type Group } from 'three/webgpu';
 
@@ -27,6 +31,7 @@ export function HistoryRenderer() {
  * with no friction so they always clear the screen.
  */
 function HistoryPage({ index, source }: { index: number; source: string }) {
+  const world = useWorld();
   const { data } = useActiveScreen();
   const visible = (data?.historyPages ?? 0) > index;
   const target = visible ? 0 : data?.id === 'work' ? -1 : 1;
@@ -102,6 +107,16 @@ function HistoryPage({ index, source }: { index: number; source: string }) {
     toss.elapsed += Math.min(delta, 1 / 30);
     if (!toss.launched && toss.elapsed >= toss.delay) {
       toss.launched = true;
+      // The sheet swooshes across as it is tossed in from the right, and a stack flicked away swooshes once with
+      // its top sheet
+      if (!toss.leaving || toss.delay === 0)
+        soundActions(world).cueSound(
+          'whoosh',
+          toss.leaving ? toss.direction * 0.4 : 0.4,
+          // Each sheet of the stack swooshes a step higher than the one beneath it
+          varied((toss.leaving ? 1.6 : 1.15) * (0.88 + index * 0.12)),
+          toss.leaving ? 0.03 : 0.04
+        );
       if (toss.leaving) {
         // Snatched up and flicked clear, with a bit of lift and a twist from the wrist
         toss.vx = toss.direction * 26;
@@ -149,7 +164,14 @@ function HistoryPage({ index, source }: { index: number; source: string }) {
           toss.z += toss.vz * dt;
           if (toss.z <= 0) {
             toss.z = 0;
-            // A faint hop on touchdown, then the sheet stays flat
+            // A faint hop on touchdown, then the sheet stays flat, tapping the table as it lands
+            if (toss.vz < -0.6)
+              soundActions(world).cueSound(
+                'tick',
+                0,
+                varied(0.45),
+                clamp(-toss.vz / 150, 0.01, 0.06)
+              );
             toss.vz = toss.vz < -0.6 ? -toss.vz * 0.22 : 0;
           }
           if (toss.z === 0) {
@@ -177,6 +199,12 @@ function HistoryPage({ index, source }: { index: number; source: string }) {
         const bounce = (normalX: number, normalY: number) => {
           const impact = -(toss.vx * normalX + toss.vy * normalY);
           if (impact <= 0) return;
+          soundActions(world).cueSound(
+            'tick',
+            normalX * -0.6,
+            varied(0.6),
+            clamp(impact / 400, 0.01, 0.06)
+          );
           const along = toss.vx * -normalY + toss.vy * normalX;
           toss.vx = normalX * impact * 0.85 + -normalY * along * 0.68;
           toss.vy = normalY * impact * 0.85 + normalX * along * 0.68;

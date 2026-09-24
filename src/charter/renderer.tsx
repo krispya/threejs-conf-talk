@@ -1,5 +1,5 @@
 import { Position, IsHidden } from '../traits.js';
-import { useQuery } from 'koota/react';
+import { useQuery, useWorld } from 'koota/react';
 import { Charter } from './traits.js';
 import { useActiveScreen } from '../timeline/hooks.js';
 import { useViewBinding, useEntityVisible } from '../view/hooks.js';
@@ -18,6 +18,8 @@ import { brand, fonts, ramp } from '../theme.js';
 import { useTransitionOpacity } from '../transition/use-transition-opacity.js';
 import { CharterDateStamp } from './date-stamp.js';
 import { CharterMarker } from './marker.js';
+import { soundActions } from '../sound/actions.js';
+import { varied } from '../sound/systems.js';
 
 export function CharterRenderer() {
   const documents = useQuery(Charter, Position);
@@ -37,6 +39,9 @@ function CharterView({ entity }: { entity: Entity }) {
     ease: easing.cubicInOut,
   });
   const progress = useTransitionOpacity(visible, { duration: visible ? undefined : 1 });
+  const world = useWorld();
+  // How far the sheet had come in last frame, so each entrance swooshes once
+  const slid = useRef(0);
   const departure = useTransitionOpacity(data?.announcementVisible ?? false, {
     duration: 1,
     ease: easing.cubicInOut,
@@ -85,6 +90,10 @@ function CharterView({ entity }: { entity: Entity }) {
     const group = entity.get(Ref);
     if (!group) return;
     group.visible = progress.value > 0;
+    // The sheet slides up with a long swoosh each time it comes in
+    if (visible && slid.current === 0 && progress.value > 0)
+      soundActions(world).cueSound('whoosh', 0.2, varied(0.8), 0.045);
+    slid.current = progress.value;
     if (!group.visible || !sheet.current || !upperFold.current || !lowerFold.current) return;
 
     const reveal = focus.value > 0 ? 1 : progress.value;
