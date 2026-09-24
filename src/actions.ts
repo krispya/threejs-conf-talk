@@ -6,6 +6,7 @@ import { cameraActions } from './camera/actions.js';
 import { letterActions } from './letter/actions.js';
 import { profileActions } from './profile/actions.js';
 import { packageActions } from './package/actions.js';
+import { soundActions } from './sound/actions.js';
 import { timelineActions } from './timeline/actions.js';
 import { transitionActions } from './transition/actions.js';
 
@@ -17,6 +18,7 @@ export const actions = createActions((world) => ({
   ...letterActions(world),
   ...profileActions(world),
   ...packageActions(world),
+  ...soundActions(world),
   ...timelineActions(world),
   ...transitionActions(world),
 }));

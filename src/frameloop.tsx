@@ -26,6 +26,7 @@ import { syncTransforms } from './view/systems.js';
 import { captureBackdrop } from './glass/systems.js';
 import { composeShowreel } from './background/systems.js';
 import { advanceTransitions, syncTransitionUniforms } from './transition/systems.js';
+import { listenForSounds, playSounds } from './sound/systems.js';
 
 // The application owns the order in which domain systems run. Systems run ahead of every view
 // callback, which keeps the default priority, and captures that read the finished frame run last.
@@ -54,6 +55,9 @@ export function FrameLoop() {
       animateDownloadCounters(world);
       animateFeatureChips(world);
       placeMaintainerPortraits(world);
+      // The listener runs last so it hears everything the frame changed
+      listenForSounds(world);
+      playSounds(world);
 
       updateBounds(world, state.viewport.getCurrentViewport(state.camera));
     },

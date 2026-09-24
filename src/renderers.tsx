@@ -7,6 +7,7 @@ import { InitiativeRenderer } from './initiative/renderer.js';
 import { PackageRenderer } from './package/renderer.js';
 import { ProfileRenderer } from './profile/renderer.js';
 import { RobotReveal } from './robot/renderer.js';
+import { SoundRenderer } from './sound/renderer.js';
 import { TeamConnections } from './profile/team-connections.js';
 import { Foreground } from './foreground/renderer.js';
 import { TitleRenderer } from './title/renderer.js';
@@ -37,6 +38,9 @@ export function Renderers() {
       </Suspense>
       <Suspense fallback={null}>
         <ClosingRenderer />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SoundRenderer />
       </Suspense>
     </>
   );

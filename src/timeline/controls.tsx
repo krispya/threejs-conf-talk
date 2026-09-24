@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { actions } from '../actions.js';
 
 export function TimelineControls() {
-  const { next, previous } = useActions(actions);
+  const { next, previous, toggleSound } = useActions(actions);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -21,12 +21,14 @@ export function TimelineControls() {
       } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
         event.preventDefault();
         previous();
+      } else if (event.key === 'm' || event.key === 'M') {
+        toggleSound();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [next, previous]);
+  }, [next, previous, toggleSound]);
 
   return null;
 }
