@@ -26,6 +26,7 @@ import { PackageFeatures } from './features.js';
 import { PackageMaintainers } from './maintainers.js';
 import { defineTextMaterial } from '@pmndrs/glyph/three';
 import { color } from 'three/tsl';
+import { soundActions } from '../sound/actions.js';
 
 export function PackageRenderer() {
   const world = useWorld();
@@ -33,7 +34,15 @@ export function PackageRenderer() {
   const { timeline, data } = useActiveScreen();
   const timing = useTrait(timeline, Timeline);
   const group = useRef<Group>(null);
-  const departure = useRef({ value: 0, from: 0, target: 0, delay: 0, duration: 0, visible: false });
+  const departure = useRef({
+    value: 0,
+    from: 0,
+    target: 0,
+    delay: 0,
+    duration: 0,
+    visible: false,
+    sounded: true,
+  });
   const leavingDown = !!data?.codeComparisonVisible || !!data?.warpVisible || !!data?.teamVisible;
   const exitDuration = leavingDown
     ? Math.min(data?.warpVisible ? 0.65 : 0.9, timing?.duration ?? 0)
@@ -41,6 +50,7 @@ export function PackageRenderer() {
 
   useLayoutEffect(() => {
     const motion = departure.current;
+    const wasVisible = motion.visible;
     const returning = data?.packageEntry === 'rise' && !motion.visible;
     if (data?.packagesVisible && !motion.visible && data.packageEntry === 'scale') motion.value = 0;
     motion.visible = data?.packagesVisible ?? false;
@@ -51,6 +61,7 @@ export function PackageRenderer() {
     motion.duration = returning
       ? data.packageDuration
       : (exitDuration ?? Math.min(0.9, timing?.duration ?? 0));
+    motion.sounded = motion.from === motion.target || (!wasVisible && !motion.visible);
   }, [
     leavingDown,
     data?.packagesVisible,
@@ -67,6 +78,15 @@ export function PackageRenderer() {
     const motion = departure.current;
     const elapsed = world.get(Time)!.elapsed - (timing?.startedAt ?? 0) - motion.delay;
     const progress = motion.duration <= 0 ? 1 : clamp(elapsed / motion.duration, 0, 1);
+    if (!motion.sounded && elapsed > 0) {
+      motion.sounded = true;
+      soundActions(world).cueSound(
+        motion.target === 1 ? 'drop' : 'whoosh',
+        0,
+        0.9 / Math.max(0.1, motion.duration),
+        motion.target === 1 ? 0.04 : 0.07
+      );
+    }
     motion.value = lerp(
       motion.from,
       motion.target,

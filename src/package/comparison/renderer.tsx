@@ -12,7 +12,7 @@ import { fonts, ramp } from '../../theme.js';
 import { MeltMaterial as MeltMaterialImpl } from './melt-material.js';
 import { Text, TextGroup, useMsdf } from '@pmndrs/glyph/react';
 import { soundActions } from '../../sound/actions.js';
-import { varied } from '../../sound/systems.js';
+import { pitch, varied } from '../../sound/systems.js';
 
 const MeltMaterial = extend(MeltMaterialImpl);
 
@@ -29,7 +29,14 @@ export function CodeComparisonRenderer() {
   // The cards swoosh once together as the first of them starts sliding
   const slid = useRef(true);
   const motion = useRef(
-    Array.from({ length: 4 }, () => ({ value: 1, from: 1, target: 1, delay: 0, duration: 0 }))
+    Array.from({ length: 4 }, () => ({
+      value: 1,
+      from: 1,
+      target: 1,
+      delay: 0,
+      duration: 0,
+      sounded: true,
+    }))
   );
 
   useLayoutEffect(() => {
@@ -37,6 +44,7 @@ export function CodeComparisonRenderer() {
       if (!visible && Math.abs(item.value) >= 1) {
         item.from = item.value;
         item.target = item.value;
+        item.sounded = true;
         return;
       }
       const entering = visible && Math.abs(item.value) >= 1;
@@ -49,6 +57,7 @@ export function CodeComparisonRenderer() {
           : -1;
       item.delay = entering ? 0.9 + index * 0.12 : 0;
       item.duration = visible ? Math.max(0, (timing?.duration ?? 0) - item.delay) : 0.65;
+      item.sounded = !entering;
     });
     slid.current = motion.current.every((item) => item.from === item.target);
   }, [visible, data?.id, data?.packageEntry, timing]);
@@ -74,6 +83,17 @@ export function CodeComparisonRenderer() {
           varied(visible ? 1.3 : 1.6),
           visible ? 0.035 : 0.025
         );
+      }
+      // The two panels and the sphere each enter on their own note of a rising major chord
+      if (!item.sounded && progress > 0) {
+        item.sounded = true;
+        if (index !== 1)
+          soundActions(world).cueSound(
+            index === 3 ? 'bloop' : 'pluck',
+            index === 0 ? -0.45 : index === 2 ? 0.15 : 0.55,
+            pitch(index === 0 ? 0 : index === 2 ? 4 : 7),
+            index === 3 ? 0.16 : 0.13
+          );
       }
       item.value = lerp(
         item.from,

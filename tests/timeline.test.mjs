@@ -1476,7 +1476,10 @@ void test('gathers the principles into the logo behind the curtain, and reverses
   const { id: logoId, principlesLogo: __, ...next } = logoScreen.get(sim.Screen);
   assert.notEqual(tastefulId, logoId);
   assert.deepEqual(next, held);
-  assert(logoScreen.get(sim.ScreenTransition).duration >= 2.5);
+  assert(
+    logoScreen.get(sim.ScreenTransition).duration >= 4,
+    'There is time to follow the collage forming'
+  );
   advance(world, 4);
   assert.deepEqual(camera.get(sim.Position), position);
   timeline.previous();

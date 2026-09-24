@@ -20,6 +20,9 @@ export type OneShot =
   | 'sparkle'
   | 'pluck'
   | 'swell'
+  | 'drop'
+  | 'rustle'
+  | 'veil'
   | 'fall';
 
 /**

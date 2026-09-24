@@ -429,8 +429,8 @@ export const screens = [
     packageSizing: 'proportional',
     profilesVisible: true,
     backgroundVisible: true,
-    // The words lift into pieces that glide together as the mark
-    transition: { duration: 2.8, cameraX: 0, cameraY: 0, cameraZ: -5 },
+    // Overlapping word breakups gradually fill a collage of the mark
+    transition: { duration: 4.2, cameraX: 0, cameraY: 0, cameraZ: -5 },
   },
   {
     id: 'charter',
