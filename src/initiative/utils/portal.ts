@@ -142,7 +142,7 @@ export function createInitiativeScene() {
   const lamp = new PointLight('#d38aff', 22, 6, 2);
   lamp.position.set(0.1, -0.3, -0.25);
   lamp.castShadow = true;
-  // Nothing that casts a shadow moves except the grass sway, so both maps render once
+  // Nothing that casts a shadow moves except the grass and leaf sway, so both maps render once
   lamp.shadow.autoUpdate = false;
   lamp.shadow.mapSize.set(1024, 1024);
   lamp.shadow.camera.near = 0.05;

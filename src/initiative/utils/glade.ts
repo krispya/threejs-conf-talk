@@ -6,12 +6,15 @@ import {
   hash,
   instanceIndex,
   mix,
+  modelWorldMatrix,
+  modelWorldMatrixInverse,
   mx_noise_float,
   positionLocal,
   smoothstep,
   uniform,
   uv,
   vec3,
+  vec4,
 } from 'three/tsl';
 import {
   AdditiveBlending,
@@ -30,13 +33,12 @@ import {
   PlaneGeometry,
   Quaternion,
   Vector3,
-  type MeshStandardMaterial,
   type Node,
 } from 'three/webgpu';
 
 const GRASS_BLADES = 11000;
 
-/** Grass bends above fixed terrain samples while wind and drifting light run on the GPU. */
+/** Grass bends above fixed terrain samples and the portal's leaves sway while wind and drifting light run on the GPU. */
 export function createInitiativeGlade(model: Group, visibility: Node<'float'>) {
   const group = new Group();
   group.name = 'initiative-glade';
@@ -68,13 +70,15 @@ export function createInitiativeGlade(model: Group, visibility: Node<'float'>) {
   const roots = new Float32Array(GRASS_BLADES * 4);
   blade.setAttribute('grassRoot', new InstancedBufferAttribute(roots, 4));
   const root = attribute<'vec4'>('grassRoot', 'vec4');
-  const breeze = mx_noise_float(vec3(root.x.mul(1.4), root.z.mul(1.4), phase.mul(0.24)));
-  const flutter = mx_noise_float(vec3(root.x.mul(4), root.z.mul(4), phase.mul(0.65)));
+  // One wind field bends the grass and the portal's leaves together
+  const wind = (x: Node<'float'>, z: Node<'float'>) => {
+    const breeze = mx_noise_float(vec3(x.mul(1.4), z.mul(1.4), phase.mul(0.24)));
+    const flutter = mx_noise_float(vec3(x.mul(4), z.mul(4), phase.mul(0.65)));
+    return vec3(breeze.mul(0.22).add(flutter.mul(0.035)), 0, breeze.mul(0.09));
+  };
   // positionLocal already includes the instance transform, so anchor bending to blade UV height
   const bend = uv().y.mul(uv().y).mul(root.w);
-  grassMaterial.positionNode = positionLocal.add(
-    vec3(breeze.mul(0.22).add(flutter.mul(0.035)), 0, breeze.mul(0.09)).mul(bend)
-  );
+  grassMaterial.positionNode = positionLocal.add(wind(root.x, root.z).mul(bend));
   grassMaterial.colorNode = mix(color('#102b2b'), color('#78966a'), uv().y);
   grassMaterial.emissiveNode = mix(color('#12382f'), color('#537d68'), uv().y)
     .mul(0.22)
@@ -92,7 +96,17 @@ export function createInitiativeGlade(model: Group, visibility: Node<'float'>) {
   const tint = new Color();
   model.traverse((object) => {
     if (!(object instanceof Mesh)) return;
-    const material = object.material as MeshStandardMaterial;
+    const material = object.material as MeshStandardNodeMaterial;
+    if (material.name === 'plant1' || material.name === 'plant2') {
+      // Every leaf grows from the ground, so each bends more the higher it reaches
+      const world = modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz;
+      const height = world.y.add(1.8).max(0);
+      material.positionNode = positionLocal.add(
+        modelWorldMatrixInverse.mul(vec4(wind(world.x, world.z).mul(height.mul(height).mul(0.05)), 0))
+          .xyz
+      );
+      return;
+    }
     if (material.name !== 'ground') return;
     const sampler = new MeshSurfaceSampler(object).build();
     // The upstream types omit the sampler's custom random generator

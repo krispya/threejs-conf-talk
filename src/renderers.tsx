@@ -4,6 +4,7 @@ import { ClosingRenderer } from './closing/renderer.js';
 import { CodeComparisonRenderer } from './package/comparison/renderer.js';
 import { LetterRenderer } from './letter/renderer.js';
 import { InitiativeRenderer } from './initiative/renderer.js';
+import { PortalFall } from './initiative/fall.js';
 import { PackageRenderer } from './package/renderer.js';
 import { ProfileRenderer } from './profile/renderer.js';
 import { RobotReveal } from './robot/renderer.js';
@@ -36,6 +37,7 @@ export function Renderers() {
       <Suspense fallback={null}>
         <InitiativeRenderer />
       </Suspense>
+      <PortalFall />
       <Suspense fallback={null}>
         <ClosingRenderer />
       </Suspense>
