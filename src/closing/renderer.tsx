@@ -14,7 +14,10 @@ void useMsdf.preload(fonts.sans);
 void useMsdf.preload(fonts.mono);
 useTexture.preload('./closing/discord-qr.png');
 
-/** The send off: black type on the brand cyan with the Discord invite as a QR code. */
+/**
+ * The send off: black type on the brand cyan with the Discord invite as a QR code drawn in the PMNDRS mark's
+ * pixels, labelled with a chip that mirrors the one in the opposite corner.
+ */
 export function ClosingRenderer() {
   const sans = useMsdf(fonts.sans);
   const mono = useMsdf(fonts.mono);
@@ -43,6 +46,14 @@ export function ClosingRenderer() {
     material.depthWrite = false;
     return material;
   });
+  // The invite's chip reads with the code, so its white type never shows on the bare cyan
+  const inviteInk = defineTextMaterial((context) => {
+    const material = context.createDefaultMaterial();
+    material.opacityNode = (material.opacityNode as Node<'float'> | null)?.mul(code) ?? code;
+    material.depthTest = false;
+    material.depthWrite = false;
+    return material;
+  });
   const codeOpacity = smoothstep(0, 0.5, code);
   const root = useRef<Group>(null);
   const chip = useRef<Group>(null);
@@ -60,6 +71,8 @@ export function ClosingRenderer() {
     const scale = Math.min(height / 9, width / 16);
     root.current.scale.setScalar(scale);
     chip.current.position.set((-width * 0.455) / scale, (height * 0.46) / scale, 0);
+    // The invite stands on the bottom edge like the corner mark, mirroring its margin on the right
+    invite.current.position.set((width * 0.455) / scale - 1.41, (-height * 0.5) / scale + 1.92, 0);
     words.current.position.y = lerp(-0.4, 0, progress.value);
     invite.current.scale.setScalar(lerp(0.96, 1, code.value));
   });
@@ -109,19 +122,30 @@ export function ClosingRenderer() {
           </Text>
         </TextGroup>
       </group>
-      <group ref={invite} name="discord-invite" position={[5.9, -2, 0]}>
-        <TextGroup material={ink} renderOrder={41}>
+      <group ref={invite} name="discord-invite">
+        <mesh position={[0, -1.735, 0]} renderOrder={40}>
+          <planeGeometry args={[2.82, 0.37]} />
+          <meshBasicNodeMaterial
+            color="#000000"
+            opacityNode={code}
+            transparent
+            depthTest={false}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+        <TextGroup material={inviteInk} renderOrder={41}>
           <Text
             font={mono}
-            position={[-1.2, -1.7, 0]}
+            position={[-1.29, -1.6, 0]}
             layout={{ wrap: 'none' }}
-            style={{ fontSize: 0.18, lineHeight: 1, color: '#000000' }}
+            style={{ fontSize: 0.2, lineHeight: 1, color: '#ffffff' }}
           >
             discord.gg/poimandres
           </Text>
         </TextGroup>
         <mesh renderOrder={40}>
-          <planeGeometry args={[2.4, 2.4]} />
+          <planeGeometry args={[2.82, 2.82]} />
           <meshBasicNodeMaterial
             map={qr}
             opacityNode={codeOpacity}
