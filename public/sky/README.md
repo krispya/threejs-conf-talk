@@ -7,5 +7,5 @@ Source: [HYG Star Database v4.1](https://github.com/astronexus/HYG-Database/blob
 Regenerate after downloading `hygdata_v41.csv`:
 
 ```sh
-node scripts/bake-star-map.mjs /path/to/hygdata_v41.csv
+pnpm bake star-map /path/to/hygdata_v41.csv
 ```
